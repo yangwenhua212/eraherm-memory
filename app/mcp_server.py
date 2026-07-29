@@ -84,9 +84,12 @@ def create_mcp():
         query: str,
         user_id: str = "default",
         top_k: int = 8,
+        min_score: float | None = None,
     ) -> str:
         """Recall relevant memories for a query. Use when asked about past project facts."""
-        items = _c().memory_service.recall(user_id=user_id, query=query, top_k=top_k)
+        items = _c().memory_service.recall(
+            user_id=user_id, query=query, top_k=top_k, min_score=min_score
+        )
         recs = _c().memory_service.recommend_sidecar(
             user_id=user_id, query=query, exclude_memory_ids=[i.id for i in items]
         )

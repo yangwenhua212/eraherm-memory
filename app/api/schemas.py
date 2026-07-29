@@ -101,6 +101,12 @@ class RecallRequest(BaseModel):
     top_k: Optional[int] = Field(default=None, ge=1, le=100)
     include_pinned: bool = True
     expand_graph: bool = False
+    min_score: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Override ERAHERM_RECALL_MIN_SCORE; drop items below this score",
+    )
 
 
 class RecallItemResponse(BaseModel):
@@ -247,6 +253,30 @@ class ConsolidateUserReport(BaseModel):
 
 class ConsolidateResponse(BaseModel):
     reports: list[ConsolidateUserReport]
+
+
+class ReembedRequest(BaseModel):
+    user_id: Optional[str] = None
+    orphan_policy: str = Field(default="assign", pattern="^(assign|skip|fail)$")
+    orphan_user_id: Optional[str] = None
+    batch_size: int = Field(default=32, ge=1, le=512)
+    force: bool = False
+    dry_run: bool = False
+    cleanup_dangling: bool = True
+    recreate_collection: bool = False
+
+
+class ReembedResponse(BaseModel):
+    scanned: int
+    reembedded: int
+    skipped_current: int
+    orphans_assigned: int
+    orphans_skipped: int
+    dangling_vectors_removed: int
+    errors: list[str] = Field(default_factory=list)
+    target_model: str
+    target_dim: int
+    dry_run: bool
 
 
 class MetricsResponse(BaseModel):

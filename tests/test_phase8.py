@@ -40,6 +40,7 @@ def _build(tmp_path: Path) -> tuple[MemoryService, ConsolidationService]:
         consolidation_cluster_min_size=3,
         consolidation_cluster_similarity=0.2,
         consolidation_forget_weight_threshold=0.08,
+        recall_min_score=0.0,
         json_logs=False,
     )
     repo = SqliteMemoryRepository(settings.database_url)

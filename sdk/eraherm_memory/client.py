@@ -106,6 +106,7 @@ class MemoryClient:
         top_k: int = 8,
         include_pinned: bool = True,
         tenant_id: str | None = None,
+        min_score: float | None = None,
     ) -> dict[str, Any]:
         body: dict[str, Any] = {
             "user_id": user_id,
@@ -116,6 +117,8 @@ class MemoryClient:
         }
         if tenant_id is not None:
             body["tenant_id"] = tenant_id
+        if min_score is not None:
+            body["min_score"] = min_score
         return self._client.post("/v1/recall", json=body).raise_for_status().json()
 
     def impact(

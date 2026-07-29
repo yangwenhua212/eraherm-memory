@@ -5,6 +5,12 @@
 
 ## [Unreleased]
 
+### Added
+- `fastembed` embedding 适配器（默认 `BAAI/bge-small-zh-v1.5` / 512 维），可选依赖 `eraherm-memory[fastembed]`
+- 召回门禁 `ERAHERM_RECALL_MIN_SCORE`（默认 0.25）与请求字段 `min_score`：低于阈值的命中直接丢弃，避免库少时硬拉低分结果
+- 全量向量迁移：`eraherm-reembed` / `python -m app.ops.reembed` / `POST /v1/admin/reembed`（重算 embedding、修复 `user_id=None` 孤儿、清理悬空向量；**不做双轨 hashing 兜底**）
+- Hermes 内置 Tools：`HermesMemoryTools`（`memory_recall` / `remember` / `pin` / `correct` / `impact`），OpenAI function-calling schema + `dispatch`；`HermesMemoryBridge` 升入 SDK
+
 ## [0.8.0] - 2026-07-29
 
 ### Added

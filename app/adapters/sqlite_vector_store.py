@@ -98,6 +98,18 @@ class SqliteVectorStore:
             db.commit()
         return count
 
+    def get_meta(self, memory_id: str) -> dict | None:
+        with Session(self.engine) as db:
+            row = db.get(EmbeddingRow, memory_id)
+            if row is None:
+                return None
+            return {"user_id": row.user_id, "model": row.model, "dim": row.dim}
+
+    def list_memory_ids(self) -> list[str]:
+        with Session(self.engine) as db:
+            rows = list(db.exec(select(EmbeddingRow.memory_id)).all())
+        return [str(mid) for mid in rows]
+
     def search(
         self,
         *,

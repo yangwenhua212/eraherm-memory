@@ -289,8 +289,10 @@ class MemoryService:
         tenant_id: str | None = None,
         top_k: int | None = None,
         include_pinned: bool = True,
+        min_score: float | None = None,
     ) -> list[RecallItem]:
         top_k = top_k or self.settings.recall_top_k_default
+        threshold = self.settings.recall_min_score if min_score is None else min_score
         now = self.clock.now()
         lam = self.settings.decay_lambda_default
         tokens = _tokenize(query)
@@ -389,6 +391,10 @@ class MemoryService:
                 )
 
         candidates = list(by_id.values())
+        if threshold > 0:
+            # Drop weak / hard-pulled hits (incl. pinned with near-zero relevance).
+            candidates = [c for c in candidates if c.score >= threshold]
+
         pinned_items = [c for c in candidates if c.pinned] if include_pinned else []
         pinned_items = sorted(pinned_items, key=lambda x: x.score, reverse=True)[
             : self.settings.recall_pinned_cap

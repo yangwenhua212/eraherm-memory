@@ -54,6 +54,7 @@ def test_admin_l3_and_metrics_api(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     monkeypatch.setenv("ERAHERM_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("ERAHERM_ADMIN_TOKEN", "test-admin")
     monkeypatch.setenv("ERAHERM_EMBEDDING_BACKEND", "hashing")
+    monkeypatch.setenv("ERAHERM_RECALL_MIN_SCORE", "0")
     monkeypatch.setenv("ERAHERM_JSON_LOGS", "false")
     get_settings.cache_clear()
     app = create_app()

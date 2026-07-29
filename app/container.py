@@ -54,6 +54,22 @@ def build_embedding_client(settings: Settings) -> EmbeddingClient:
             model=settings.embedding_model,
             dimensions=settings.embedding_dim,
         )
+    if backend == "fastembed":
+        from app.adapters.fastembed_embedding import (
+            DEFAULT_FASTEMBED_MODEL,
+            FastEmbedEmbeddingClient,
+        )
+
+        model = settings.embedding_model.strip()
+        # Keep openai default model name from leaking into local ONNX path.
+        if model in ("", "text-embedding-3-small", "hashing-v1"):
+            model = DEFAULT_FASTEMBED_MODEL
+        cache = str(settings.embedding_cache_dir) if settings.embedding_cache_dir else None
+        return FastEmbedEmbeddingClient(
+            model_name=model,
+            dimensions=settings.embedding_dim,
+            cache_dir=cache,
+        )
     return HashingEmbeddingClient(dimensions=settings.embedding_dim)
 
 

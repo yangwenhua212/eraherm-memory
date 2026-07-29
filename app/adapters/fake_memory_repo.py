@@ -90,3 +90,23 @@ class FakeMemoryRepository:
             if m.deleted_at is None and m.user_id
         }
         return sorted(users)
+
+    def list_active_memories(
+        self,
+        *,
+        user_id: str | None = None,
+        include_orphans: bool = True,
+        tenant_id: str | None = None,
+        limit: int | None = None,
+    ) -> list[MemoryRow]:
+        rows = [m for m in self.memories.values() if m.deleted_at is None]
+        if user_id is not None:
+            rows = [m for m in rows if m.user_id == user_id]
+        elif not include_orphans:
+            rows = [m for m in rows if m.user_id]
+        if tenant_id is not None:
+            rows = [m for m in rows if m.tenant_id == tenant_id]
+        rows.sort(key=lambda m: m.updated_at, reverse=True)
+        if limit is not None:
+            rows = rows[:limit]
+        return [m.model_copy(deep=True) for m in rows]

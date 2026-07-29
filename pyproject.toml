@@ -45,7 +45,8 @@ qdrant = ["qdrant-client>=1.12.0"]
 neo4j = ["neo4j>=5.26.0"]
 mcp = ["mcp>=1.9.0,<2"]
 scheduler = ["apscheduler>=3.10.0"]
-all = ["eraherm-memory[redis,qdrant,neo4j,mcp,scheduler]"]
+fastembed = ["fastembed>=0.4.0"]
+all = ["eraherm-memory[redis,qdrant,neo4j,mcp,scheduler,fastembed]"]
 
 [project.urls]
 Changelog = "https://github.com/yangwenhua212/eraherm-memory/blob/main/CHANGELOG.md"
@@ -57,6 +58,7 @@ Homepage = "https://github.com/yangwenhua212/eraherm-memory"
 eraherm-l3-dump = "app.ops.l3_dump:main"
 eraherm-eval = "evals.harness:main"
 eraherm-consolidate = "app.ops.consolidate:main"
+eraherm-reembed = "app.ops.reembed:main"
 eraherm-mcp = "app.mcp_server:main"
 
 [build-system]

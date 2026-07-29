@@ -42,7 +42,7 @@ app/adapters/
 | SessionCache | L1 | dict / diskcache | Redis |
 | ArchiveStore | L3 | 本地目录 | S3 |
 | LLMClient | 抽取与 Reflection | OpenAI 兼容 | 本地 vLLM |
-| EmbeddingClient | 向量化 | OpenAI 兼容 | bge-m3 本地 |
+| EmbeddingClient | 向量化 | hashing / OpenAI 兼容 | **fastembed**（`bge-small-zh-v1.5`） |
 | ImportanceScorer | 重要性评分 | 规则启发式 | LLM 评分 |
 | DecayPolicy | 衰减与删除 | 指数衰减 | 可插拔策略表 |
 | ReflectionPipeline | 反馈后处理 | 单 prompt | 多步 + 人工审核队列 |
