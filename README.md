@@ -94,7 +94,7 @@ ERAHERM_RECALL_MIN_SCORE=0.25
 | **轻量知识图谱** | 结构推理：「改 A 会影响谁」 |
 | **反馈闭环** | 点赞 / 点踩 / **纠正** → Reflection → 写回并优先 |
 
-当前版本 **0.8.x**：MCP、整理压缩、`eraherm-reembed` 全量重嵌、Hermes 内置 Tools（`HermesMemoryTools`）。详见 [CHANGELOG](CHANGELOG.md)、[ROADMAP](docs/ROADMAP.md)。
+当前版本 **0.9.0**：MCP、整理压缩、`eraherm-reembed`、Hermes 内置 Tools、`correct_to_evolve` 自测脚本。详见 [CHANGELOG](CHANGELOG.md)、[ROADMAP](docs/ROADMAP.md)。
 
 ---
 
@@ -118,6 +118,7 @@ with MemoryClient("http://127.0.0.1:8000") as client:
 
 - Hermes 深集成（替代 curl）：[HERMES_INTEGRATION.md](docs/HERMES_INTEGRATION.md)  
 - 示例：`python examples/hermes_builtin_tools.py`  
+- 纠正闭环自测：`python examples/correct_to_evolve.py`  
 - 换 embedding 后重建向量：`eraherm-reembed --orphan-user-id <uid>`（[DEPLOYMENT.md §3.1](docs/DEPLOYMENT.md)）  
 - 评测：`python -m evals.harness` · 测试：`python -m pytest -q`
 

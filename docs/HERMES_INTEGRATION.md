@@ -135,14 +135,65 @@ eraherm-reembed --orphan-user-id hermes:boss
 
 ---
 
-## 8. 接入检查清单
+## 8. 服务器上线检查表（自用 Hermes，按序勾）
 
-- [ ] `user_id` 跨会话稳定  
-- [ ] 已注册 `HermesMemoryTools.openai_tools()` + `dispatch`（不再手写 curl）  
-- [ ] 线程结束会 `end_session`  
-- [ ] UI 纠正走 `memory_correct`  
-- [ ] 生产 embedding 不是 `hashing`  
-- [ ] 旧向量已 `eraherm-reembed`  
+> 目前只有你在用时，**先跑完这张表**，比开源宣传重要。稳定 `user_id` 示例：`hermes:boss`。
+
+### A. 代码与依赖
+
+- [ ] `git pull origin main`（至少含 Tools / reembed / min_score 的提交）
+- [ ] `pip install -e '.[fastembed]'`（生产语义召回）
+- [ ] 重启 uvicorn / 记忆服务进程
+
+### B. `.env`（禁止 hashing 上线）
+
+```env
+ERAHERM_EMBEDDING_BACKEND=fastembed
+ERAHERM_EMBEDDING_MODEL=BAAI/bge-small-zh-v1.5
+ERAHERM_EMBEDDING_DIM=512
+ERAHERM_RECALL_MIN_SCORE=0.25
+```
+
+- [ ] 已按上面写死并重启生效  
+- [ ] `GET /v1/health` 正常
+
+### C. 旧向量迁移
+
+```bash
+eraherm-reembed --dry-run --orphan-user-id hermes:boss
+eraherm-reembed --orphan-user-id hermes:boss
+```
+
+- [ ] dry-run 报告无 ERROR  
+- [ ] 正式 reembed 完成；再问「老大叫什么」等旧事实能召回
+
+### D. 内置 Tools（停 curl）
+
+```python
+from eraherm_memory import MemoryClient, HermesMemoryTools
+
+tools = HermesMemoryTools(MemoryClient("http://127.0.0.1:8000"), user_id="hermes:boss")
+# hermes.register_tools(tools.openai_tools())
+# tool_call → tools.dispatch(name, arguments)
+```
+
+- [ ] `user_id` 跨会话稳定（不要每轮换）  
+- [ ] 已注册 `openai_tools()` + `dispatch`  
+- [ ] 线程结束调用 `tools.end_session()`  
+- [ ] 纠正走 `memory_correct`（或 Bridge `after_turn` feedback）
+
+### E. 纠正闭环冒烟（你自己验）
+
+- [ ] 换词能召回已有喜好/身份  
+- [ ] 故意答错 → 纠正 → 同义再问 → **新事实排第一**  
+- [ ] 完全不相关的问题：`items` 为空或低于门禁（不硬拉）
+
+本地一键脚本（仓库内）：
+
+```bash
+uvicorn app.main:app --port 8000
+python examples/correct_to_evolve.py --base-url http://127.0.0.1:8000
+```
 
 ---
 
@@ -151,4 +202,4 @@ eraherm-reembed --orphan-user-id hermes:boss
 1. `pip install eraherm-memory`（或 editable path）。  
 2. 只依赖 `eraherm_memory.*`，不要 import `app.*`。  
 3. 契约测试：`memory_remember` → `memory_recall` → `memory_correct` → 再 `memory_recall`。  
-4. 多用户：每个账号一个 `HermesMemoryTools(..., user_id=...)`。
+4. 第二个使用者（如唐美女）上线时：再开一个 `HermesMemoryTools(..., user_id=...)` 隔离即可。
