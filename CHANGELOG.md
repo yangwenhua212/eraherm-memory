@@ -5,14 +5,6 @@
 
 ## [Unreleased]
 
-### Changed
-- 默认许可证由 MIT 调整为 **AGPL-3.0-only**，并增加双许可说明 [COMMERCIAL.md](COMMERCIAL.md)
-- 源文件增加 SPDX / 版权头
-- 文档写死：**生产 / Hermes 禁止用 hashing embedding**，须 `openai` 或兼容端点
-
-### Added
-- 开源脚手架：CI、CONTRIBUTING、SECURITY、CHANGELOG
-
 ## [0.8.0] - 2026-07-29
 
 ### Added
@@ -21,6 +13,14 @@
 - 召回访问计数 `access_count` / `last_accessed_at`
 - Hermes 集成指南与 `HermesMemoryBridge` 适配器示例
 - SDK：`pin` / `consolidate` / `wait_feedback`
+- 开源脚手架：CI、CONTRIBUTING、SECURITY、CHANGELOG、AGPL-3.0 + [COMMERCIAL.md](COMMERCIAL.md)
+
+### Changed
+- 文档写死：生产 / Hermes 须使用真实 embedding（禁止 hashing 上线）
+- Demo：`/` 重定向到 `/demo/`；浏览器访问 `/v1/health` 返回可读 HTML 页
+- 预警：近重复记忆不再误报 `conflict`；推荐为空时 Demo 提示去重原因
+
+[0.8.0]: https://github.com/yangwenhua212/eraherm-memory/releases/tag/v0.8.0
 
 ## [0.7.0] - 2026-07-29
 
