@@ -92,14 +92,25 @@ python examples/hermes_memory_adapter.py --base-url http://127.0.0.1:8000
 
 ---
 
-## 6. 部署建议（挂 Hermes）
+## 6. 部署建议（挂 Hermes）— Embedding 写死
+
+**硬性约定：Hermes 生产路径禁止 `hashing`。**  
+`hashing` 只适合本仓库单测与离线脚手架；用它做「记忆准不准」的体验，召回会明显漂，口碑会坏在语义层而不是业务逻辑。
+
+生产 `.env` 最小必改：
 
 ```env
-# Hermes 生产不要用 hashing
+# ✅ 生产 / Hermes：真实 embedding（OpenAI 或兼容网关）
 ERAHERM_EMBEDDING_BACKEND=openai
-ERAHERM_EMBEDDING_API_KEY=...
+ERAHERM_EMBEDDING_API_KEY=sk-...          # 或网关 key
+ERAHERM_EMBEDDING_BASE_URL=https://api.openai.com/v1
+ERAHERM_EMBEDDING_MODEL=text-embedding-3-small
+ERAHERM_EMBEDDING_DIM=1536                # 须与模型维度一致
 
-# 可选：更好抽取/反思
+# ❌ 禁止（生产）
+# ERAHERM_EMBEDDING_BACKEND=hashing
+
+# 可选：更好抽取 / Reflection
 ERAHERM_LLM_BACKEND=openai
 ERAHERM_LLM_API_KEY=...
 
@@ -107,7 +118,11 @@ ERAHERM_LLM_API_KEY=...
 ERAHERM_CONSOLIDATION_ENABLED=false
 ```
 
-- 本机联调：同一台机 `uvicorn` + Hermes HTTP 客户端。  
+本地模型：只要提供 **OpenAI 兼容** `/v1/embeddings`，把 `BASE_URL` 指到本地即可，后端名仍用 `openai`。
+
+换 embedding 后必须重建向量（旧 hashing 向量不可混用）。
+
+- 本机联调：同一台机 `uvicorn` + Hermes HTTP 客户端（联调阶段可用 hashing，**上线前改掉**）。  
 - 同机多进程：L1 换 Redis（`ERAHERM_SESSION_CACHE_BACKEND=redis`）。  
 - 向量量大：再上 Qdrant。
 
@@ -120,7 +135,7 @@ ERAHERM_CONSOLIDATION_ENABLED=false
 - [ ] 每轮 `before_turn` 注入 recall（钉死项可见）  
 - [ ] UI 有纠正/点踩 → `feedback`  
 - [ ] `alerts` 有展示或明确忽略策略  
-- [ ] 生产 embedding 非 hashing  
+- [ ] **生产 `ERAHERM_EMBEDDING_BACKEND=openai`（或兼容端点），确认不是 `hashing`**  
 - [ ] 评测：纠正后同类问题召回新事实（`python -m evals.harness`）
 
 ---

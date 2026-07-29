@@ -38,12 +38,29 @@ Host（Claude Desktop / Cursor）会以子进程方式拉起该命令，无需�
       "args": ["-m", "app.mcp_server"],
       "cwd": "D:/bk/agent",
       "env": {
-        "ERAHERM_DATABASE_URL": "sqlite:///./storage/eraherm.db"
+        "ERAHERM_DATABASE_URL": "sqlite:///./storage/eraherm.db",
+        "ERAHERM_EMBEDDING_BACKEND": "hashing",
+        "ERAHERM_JSON_LOGS": "false"
       }
     }
   }
 }
 ```
+
+本地 Demo 可用 `hashing`。**对外演示语义召回或挂 Hermes 时**，把 env 改成真实 embedding，例如：
+
+```json
+"env": {
+  "ERAHERM_DATABASE_URL": "sqlite:///./storage/eraherm.db",
+  "ERAHERM_EMBEDDING_BACKEND": "openai",
+  "ERAHERM_EMBEDDING_API_KEY": "sk-...",
+  "ERAHERM_EMBEDDING_MODEL": "text-embedding-3-small",
+  "ERAHERM_EMBEDDING_DIM": "1536",
+  "ERAHERM_JSON_LOGS": "false"
+}
+```
+
+禁止在生产路径长期保留 `ERAHERM_EMBEDDING_BACKEND=hashing`（详见 README「生产 Embedding」）。
 
 ### Claude Desktop
 

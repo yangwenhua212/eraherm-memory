@@ -8,6 +8,7 @@
 ### Changed
 - 默认许可证由 MIT 调整为 **AGPL-3.0-only**，并增加双许可说明 [COMMERCIAL.md](COMMERCIAL.md)
 - 源文件增加 SPDX / 版权头
+- 文档写死：**生产 / Hermes 禁止用 hashing embedding**，须 `openai` 或兼容端点
 
 ### Added
 - 开源脚手架：CI、CONTRIBUTING、SECURITY、CHANGELOG

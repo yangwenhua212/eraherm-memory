@@ -7,18 +7,21 @@
 
 ## 1. 两套画像
 
-| | 默认开发 / 单机 Demo | 生产升级（按需叠加） |
+| | 默认开发 / 单机 Demo | **挂真 Agent / 生产** |
 |--|----------------------|----------------------|
-| 目标 | 跑通三大支柱、联调 Agent | 多实例 / 更大数据量 / 更强图查询 |
-| 依赖 | Python + SQLite 文件 | 按开关增加 Redis / Qdrant / Neo4j |
-| 运维 | 几乎为零 | 每开一个后端 +1 运维面 |
-| 配置 | `.env.example` 原样即可 | 只改触发到的那几项 |
+| 目标 | 跑通三大支柱、联调骨架 | 语义召回可信、给用户用 |
+| Embedding | `hashing`（离线零依赖） | **`openai` 或兼容端点（强制）** |
+| 依赖 | Python + SQLite 文件 | + Embedding API；按需 Redis / Qdrant / Neo4j |
+| 运维 | 几乎为零 | 密钥与维度管理；换模型需重建向量 |
+| 配置 | `.env.example` 可原样跑 Demo | **必须改掉 hashing** |
+
+> **口碑红线**：对外演示「记得住」或接入 Hermes 时，若仍用 `hashing`，中文语义召回会偏弱，用户会以为记忆坏了。开发默认保留 hashing 是为了 CI/离线，不是生产推荐。
 
 ---
 
 ## 2. 最小配置对照
 
-### 默认（推荐起步）
+### 默认（仅开发 / CI / 离线 Demo）
 
 ```env
 ERAHERM_DATABASE_URL=sqlite:///./storage/eraherm.db
@@ -30,6 +33,17 @@ ERAHERM_FEEDBACK_ASYNC=false
 ERAHERM_ADMIN_TOKEN=dev-admin-token
 ```
 
+### 生产 / Hermes（Embedding 写死，先改这一项）
+
+```env
+ERAHERM_EMBEDDING_BACKEND=openai
+ERAHERM_EMBEDDING_API_KEY=sk-...
+ERAHERM_EMBEDDING_BASE_URL=https://api.openai.com/v1
+ERAHERM_EMBEDDING_MODEL=text-embedding-3-small
+ERAHERM_EMBEDDING_DIM=1536
+# 其余可仍用 SQLite；有需要再按下面表格叠加 Redis/Qdrant/Neo4j
+```
+
 对应栈：
 
 | 层 | 实现 |
@@ -38,7 +52,7 @@ ERAHERM_ADMIN_TOKEN=dev-admin-token
 | L2 事实 | SQLite |
 | 向量 | SQLite BLOB |
 | 图 | SQLite 边表 + NetworkX |
-| Embedding | 本地 hashing（可改 openai） |
+| Embedding | 本地 hashing（**仅开发**；生产见上节） |
 | Reflection | 同步启发式 |
 | L3 | `storage/l3/` 本地文件 |
 
@@ -59,7 +73,7 @@ uvicorn app.main:app --reload --port 8000
 | **记忆量大 / 召回 QPS 高** | `ERAHERM_VECTOR_BACKEND=qdrant`<br>`ERAHERM_QDRANT_URL=http://...`<br>或本地 `ERAHERM_QDRANT_PATH=./storage/qdrant` | `pip install 'eraherm-memory[qdrant]'` | `embedding_dim` 须与集合维度一致 |
 | **多跳图查询变慢 / 要 Cypher** | `ERAHERM_GRAPH_BACKEND=neo4j`<br>`ERAHERM_NEO4J_URI=bolt://...`<br>`ERAHERM_NEO4J_USER=...`<br>`ERAHERM_NEO4J_PASSWORD=...` | `pip install 'eraherm-memory[neo4j]'` | 图权威源二选一，避免双写无迁移 |
 | **Reflection 拖慢请求** | `ERAHERM_FEEDBACK_ASYNC=true` | 无需新依赖（内存队列） | 用 `GET /v1/feedback/{id}` 轮询；要可靠队列再换 ARQ |
-| **要更好语义** | `ERAHERM_EMBEDDING_BACKEND=openai`<br>`ERAHERM_EMBEDDING_API_KEY=...` | 已有 httpx | 与 hashing 向量空间不兼容，换后端需重建向量 |
+| **挂真 Agent / 要语义召回准** | `ERAHERM_EMBEDDING_BACKEND=openai`<br>`ERAHERM_EMBEDDING_API_KEY=...`<br>`ERAHERM_EMBEDDING_DIM=` 与模型一致 | 已有 httpx | **生产必改**；与 hashing 向量空间不兼容，换后端需重建向量 |
 | **关掉主动预警/推荐** | `ERAHERM_PROACTIVE_ALERTS_ENABLED=false`<br>`ERAHERM_PROACTIVE_RECOMMEND_ENABLED=false` | 无 | Host 也可忽略返回的空数组字段 |
 | **夜间记忆整理** | `ERAHERM_CONSOLIDATION_ENABLED=true` | `pip install 'eraherm-memory[scheduler]'` | 或手动 `eraherm-consolidate` / admin API |
 | **IDE 一键挂载** | 配置 `mcp.json` | `pip install 'eraherm-memory[mcp]'` | 见 [MCP.md](MCP.md) |
