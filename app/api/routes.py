@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Header, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from app import __version__
 from app.api.schemas import (
@@ -86,9 +86,30 @@ def _err(status: int, code: str, message: str, details: dict | None = None) -> J
     return JSONResponse(status_code=status, content=body.model_dump())
 
 
-@router.get("/health", response_model=HealthResponse)
-def health() -> HealthResponse:
-    return HealthResponse(status="ok", version=__version__)
+@router.get(
+    "/health",
+    response_model=HealthResponse,
+    responses={200: {"content": {"text/html": {"schema": {"type": "string"}}}}},
+)
+def health(request: Request) -> HealthResponse | HTMLResponse:
+    payload = HealthResponse(status="ok", version=__version__)
+    accept = (request.headers.get("accept") or "").lower()
+    # Browsers often render bare JSON as a blank-looking tab; give a tiny HTML page.
+    if "text/html" in accept and not accept.strip().startswith("application/json"):
+        return HTMLResponse(
+            f"""<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"/><title>EraHerm health</title>
+<style>body{{font-family:system-ui,sans-serif;background:#0f1419;color:#e7eef7;padding:2rem}}
+code{{color:#9fd0ff}}</style></head>
+<body>
+<h1>EraHerm-Memory</h1>
+<p>status: <code>{payload.status}</code></p>
+<p>version: <code>{payload.version}</code></p>
+<p><a href="/demo/" style="color:#3d9cf0">打开 Demo</a>
+ · <a href="/docs" style="color:#3d9cf0">API 文档</a></p>
+</body></html>"""
+        )
+    return payload
 
 
 @router.get("/metrics", response_model=MetricsResponse)

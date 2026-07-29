@@ -168,7 +168,7 @@
         <div class="row">
           <div>
             <label>user_id</label>
-            <input id="pUser" value="u_demo" />
+            <input id="pUser" value="u_alert_demo" />
           </div>
           <div>
             <label>旧技术栈记忆</label>
@@ -417,7 +417,7 @@
         body: JSON.stringify({
           user_id: $("pUser").value.trim(),
           query: $("pQuery").value.trim(),
-          top_k: 3,
+          top_k: 1,
         }),
       });
       const data = await res.json();
@@ -436,7 +436,13 @@
         div.textContent = `[推荐] ${item.score.toFixed(3)} | ${item.content}`;
         box.appendChild(div);
       });
-      setStatus($("pRecStatus"), `items=${(data.items||[]).length} recommendations=${(data.recommendations||[]).length}`);
+      const nItem = (data.items || []).length;
+      const nRec = (data.recommendations || []).length;
+      let tip = `items=${nItem} recommendations=${nRec}`;
+      if (nRec === 0 && nItem > 0) {
+        tip += "（相关已在召回里时，旁路推荐会去重为空，属正常）";
+      }
+      setStatus($("pRecStatus"), tip);
     }
 
     $("btnExtract").onclick = async () => { try { await extract(); } catch (e) { setStatus($("gStatus"), e.message, false); } };

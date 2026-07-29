@@ -96,6 +96,16 @@ def test_tech_stack_shift_alert(tmp_path: Path):
     assert any("java" in a.message.lower() and "go" in a.message.lower() for a in result.alerts)
 
 
+def test_rewrite_same_go_fact_no_spam_conflict(tmp_path: Path):
+    memory = _build(_settings(tmp_path))
+    text = "新项目改用 Go 重写网关服务"
+    memory.remember(content=text, user_id="u_p7d", importance=0.95, extract_graph=False)
+    memory.remember(content=text, user_id="u_p7d", importance=0.95, extract_graph=False)
+    again = memory.remember(content=text, user_id="u_p7d", importance=0.95, extract_graph=False)
+    conflicts = [a for a in again.alerts if a.type == "conflict"]
+    assert len(conflicts) == 0
+
+
 def test_recommend_sidecar(tmp_path: Path):
     memory = _build(_settings(tmp_path))
     memory.remember(

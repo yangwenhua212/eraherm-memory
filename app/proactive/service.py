@@ -99,6 +99,9 @@ class ProactiveService:
             if shift and (has_shift_hint or sim >= threshold):
                 alerts.append(_shift_alert(row.content, row.id, shift, sim))
                 continue
+            # Near-duplicates of the same fact are not conflicts (re-click Demo).
+            if _near_duplicate(content, row.content):
+                continue
             if sim >= threshold + 0.08 and _looks_conflicting(content, row.content):
                 alerts.append(
                     MemoryAlert(
@@ -261,16 +264,24 @@ def _stack_shift(old: set[str], new: set[str]) -> tuple[str, str] | None:
 
 
 def _looks_conflicting(new: str, old: str) -> bool:
-    if _SHIFT_HINTS.search(new):
-        return True
+    """True only when contents likely disagree — not merely because new has '改用'."""
+    if _near_duplicate(new, old):
+        return False
     new_s, old_s = _detect_stacks(new), _detect_stacks(old)
     if new_s and old_s and not (new_s & old_s):
         return True
-    if re.search(r"(不是|而非|不要|禁止|避免)", new) and len(
+    if re.search(r"(不是|而非|不要|禁止|避免|应该是)", new) and len(
         set(_tokenize(new)) & set(_tokenize(old))
     ) >= 2:
         return True
+    # Shift wording + different stacks already handled above; same-stack "改用" is not conflict.
     return False
+
+
+def _near_duplicate(a: str, b: str, *, threshold: float = 0.72) -> bool:
+    if a.strip() == b.strip():
+        return True
+    return _lexical_hit_score(a, b) >= threshold and _lexical_hit_score(b, a) >= threshold
 
 
 def _tokenize(text: str) -> list[str]:
@@ -301,7 +312,8 @@ def _dedupe_alerts(alerts: list[MemoryAlert]) -> list[MemoryAlert]:
     seen: set[str] = set()
     out: list[MemoryAlert] = []
     for a in sorted(alerts, key=lambda x: x.severity, reverse=True):
-        key = f"{a.type}:{','.join(a.related_memory_ids)}"
+        # Collapse same type + same message shape (multiple near-dup related memories).
+        key = f"{a.type}:{a.message[:80]}"
         if key in seen:
             continue
         seen.add(key)
