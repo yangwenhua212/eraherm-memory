@@ -64,6 +64,26 @@ python -m app.mcp_server
 
 配置见仓库根目录 [`mcp.json`](mcp.json)。
 
+### ⚠ 生产 Embedding（挂真 Agent 必读）
+
+| 场景 | `ERAHERM_EMBEDDING_BACKEND` | 说明 |
+|------|------------------------------|------|
+| 单测 / 离线 Demo / CI | `hashing`（默认） | 零依赖，**语义召回弱**，中文尤甚 |
+| **Hermes / 生产 / 给别人试用「记忆准不准」** | **`openai`（或兼容端点）** | **禁止继续用 hashing** |
+
+挂真 Agent 请在 `.env` **写死**为真实向量模型，例如：
+
+```env
+ERAHERM_EMBEDDING_BACKEND=openai
+ERAHERM_EMBEDDING_API_KEY=sk-...
+ERAHERM_EMBEDDING_BASE_URL=https://api.openai.com/v1
+ERAHERM_EMBEDDING_MODEL=text-embedding-3-small
+ERAHERM_EMBEDDING_DIM=1536
+```
+
+也可用任意 OpenAI 兼容网关（本地 vLLM / Ollama 代理等）：改 `BASE_URL` + `MODEL` 即可，**不要**用 `hashing` 上线。  
+换 embedding 后端后向量空间不兼容，需清空或重建向量库后再写入记忆。详见 [DEPLOYMENT.md](docs/DEPLOYMENT.md)、[HERMES_INTEGRATION.md](docs/HERMES_INTEGRATION.md)。
+
 | 配置 | 默认 | 升级 |
 |------|------|------|
 | `ERAHERM_SESSION_CACHE_BACKEND` | `memory` | `redis` |
@@ -73,6 +93,7 @@ python -m app.mcp_server
 | `ERAHERM_PROACTIVE_ALERTS_ENABLED` | `true` | `false` 关闭预警 |
 | `ERAHERM_PROACTIVE_RECOMMEND_ENABLED` | `true` | `false` 关闭推荐 |
 | `ERAHERM_CONSOLIDATION_ENABLED` | `false` | `true` 进程内定时整理 |
+| `ERAHERM_EMBEDDING_BACKEND` | `hashing`（仅开发） | **`openai`（生产必选）** |
 
 - Demo：`http://localhost:8000/demo/`
 - 指标：`GET /v1/metrics`
