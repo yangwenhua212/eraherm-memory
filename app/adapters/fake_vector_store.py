@@ -31,6 +31,16 @@ class FakeVectorStore:
                 n += 1
         return n
 
+    def get_meta(self, memory_id: str) -> dict | None:
+        row = self._data.get(memory_id)
+        if row is None:
+            return None
+        uid, model, vec = row
+        return {"user_id": uid, "model": model, "dim": len(vec)}
+
+    def list_memory_ids(self) -> list[str]:
+        return list(self._data.keys())
+
     def search(
         self,
         *,

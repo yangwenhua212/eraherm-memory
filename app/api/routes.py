@@ -39,6 +39,8 @@ from app.api.schemas import (
     RecallResponse,
     RecommendationResponse,
     ReflectionResponse,
+    ReembedRequest,
+    ReembedResponse,
     RememberRequest,
     RememberResponse,
     SessionResponse,
@@ -232,6 +234,7 @@ def recall(body: RecallRequest, request: Request) -> RecallResponse:
         tenant_id=body.tenant_id,
         top_k=body.top_k,
         include_pinned=body.include_pinned,
+        min_score=body.min_score,
     )
     recs = svc.recommend_sidecar(
         user_id=body.user_id,
@@ -464,6 +467,39 @@ def admin_consolidate(
             for r in reports
         ]
     )
+
+
+@router.post("/admin/reembed", response_model=ReembedResponse)
+def admin_reembed(
+    body: ReembedRequest,
+    request: Request,
+    x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
+) -> ReembedResponse | JSONResponse:
+    denied = _require_admin(request, x_admin_token)
+    if denied is not None:
+        return denied
+    mem = _svc(request)
+    from app.migrate.service import ReembedService
+
+    report = ReembedService(
+        repo=mem.repo,
+        embedding=mem.embedding,
+        vectors=mem.vectors,
+        settings=request.app.state.settings,
+    ).run(
+        user_id=body.user_id,
+        orphan_policy=body.orphan_policy,  # type: ignore[arg-type]
+        orphan_user_id=body.orphan_user_id,
+        batch_size=body.batch_size,
+        force=body.force,
+        dry_run=body.dry_run,
+        cleanup_dangling=body.cleanup_dangling,
+        recreate_collection=body.recreate_collection,
+    )
+    METRICS.incr("reembed_total")
+    if report.errors and report.reembedded == 0:
+        return _err(400, "reembed_failed", report.errors[0], details=report.to_dict())
+    return ReembedResponse(**report.to_dict())
 
 
 @router.post("/admin/l3/dump", response_model=L3DumpResponse)

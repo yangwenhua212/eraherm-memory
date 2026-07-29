@@ -47,6 +47,7 @@ def _settings(tmp_path: Path) -> Settings:
         alert_similarity_threshold=0.2,
         recommend_min_score=0.05,
         recommend_top_k=3,
+        recall_min_score=0.0,
         json_logs=False,
         log_level="WARNING",
     )
@@ -137,6 +138,7 @@ def test_api_remember_alerts_and_recall_recommendations(tmp_path: Path, monkeypa
     monkeypatch.setenv("ERAHERM_DATABASE_URL", settings.database_url)
     monkeypatch.setenv("ERAHERM_EMBEDDING_BACKEND", "hashing")
     monkeypatch.setenv("ERAHERM_EMBEDDING_DIM", "128")
+    monkeypatch.setenv("ERAHERM_RECALL_MIN_SCORE", "0")
     monkeypatch.setenv("ERAHERM_PROACTIVE_ALERTS_ENABLED", "true")
     monkeypatch.setenv("ERAHERM_PROACTIVE_RECOMMEND_ENABLED", "true")
     monkeypatch.setenv("ERAHERM_EXTRACT_ON_REMEMBER", "false")

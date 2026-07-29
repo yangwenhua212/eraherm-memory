@@ -37,3 +37,12 @@ class MemoryRepository(Protocol):
     def soft_delete_memories(self, memory_ids: Sequence[str], deleted_at: str) -> int: ...
 
     def list_distinct_user_ids(self) -> list[str]: ...
+
+    def list_active_memories(
+        self,
+        *,
+        user_id: str | None = None,
+        include_orphans: bool = True,
+        tenant_id: str | None = None,
+        limit: int | None = None,
+    ) -> list[MemoryRow]: ...

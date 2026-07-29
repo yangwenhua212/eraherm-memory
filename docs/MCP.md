@@ -47,7 +47,19 @@ Host（Claude Desktop / Cursor）会以子进程方式拉起该命令，无需�
 }
 ```
 
-本地 Demo 可用 `hashing`。**对外演示语义召回或挂 Hermes 时**，把 env 改成真实 embedding，例如：
+本地 Demo 可用 `hashing`。**对外演示语义召回或挂 Hermes 时**，把 env 改成真实 embedding，例如本地中文：
+
+```json
+"env": {
+  "ERAHERM_DATABASE_URL": "sqlite:///./storage/eraherm.db",
+  "ERAHERM_EMBEDDING_BACKEND": "fastembed",
+  "ERAHERM_EMBEDDING_MODEL": "BAAI/bge-small-zh-v1.5",
+  "ERAHERM_EMBEDDING_DIM": "512",
+  "ERAHERM_JSON_LOGS": "false"
+}
+```
+
+或 OpenAI 兼容 API：
 
 ```json
 "env": {

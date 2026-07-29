@@ -77,6 +77,7 @@ def _build_services(tmp: Path):
         proactive_recommend_enabled=True,
         alert_similarity_threshold=0.2,
         recommend_min_score=0.05,
+        recall_min_score=0.0,
     )
     settings.ensure_dirs()
     repo = SqliteMemoryRepository(settings.database_url)
