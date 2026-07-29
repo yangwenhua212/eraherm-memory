@@ -41,6 +41,7 @@ def _settings(tmp_path: Path) -> Settings:
         graph_min_extract_confidence=0.5,
         embedding_backend="hashing",
         embedding_dim=64,
+        recall_min_score=0.0,
     )
 
 
@@ -108,6 +109,7 @@ def test_graph_api_impact_demo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("ERAHERM_DATABASE_URL", settings.database_url)
     monkeypatch.setenv("ERAHERM_DATA_DIR", str(settings.data_dir))
     monkeypatch.setenv("ERAHERM_EMBEDDING_BACKEND", "hashing")
+    monkeypatch.setenv("ERAHERM_RECALL_MIN_SCORE", "0")
     monkeypatch.setenv("ERAHERM_EXTRACT_ON_REMEMBER", "true")
     from app.config import get_settings
 

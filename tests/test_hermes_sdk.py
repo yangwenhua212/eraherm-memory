@@ -24,6 +24,7 @@ def sdk_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("ERAHERM_ADMIN_TOKEN", "test-admin")
     monkeypatch.setenv("ERAHERM_EMBEDDING_BACKEND", "hashing")
     monkeypatch.setenv("ERAHERM_EMBEDDING_DIM", "64")
+    monkeypatch.setenv("ERAHERM_RECALL_MIN_SCORE", "0")
     monkeypatch.setenv("ERAHERM_JSON_LOGS", "false")
     monkeypatch.setenv("ERAHERM_EXTRACT_ON_REMEMBER", "false")
     get_settings.cache_clear()

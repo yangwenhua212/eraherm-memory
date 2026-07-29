@@ -115,6 +115,8 @@
 
 | 触发条件 | 动作 |
 |----------|------|
+| 换 embedding / 维度 | `eraherm-reembed` 全量覆盖（已实现，禁止双轨） |
+| Hermes 深集成 | `HermesMemoryTools` 内置 tool（已实现，替代 curl） |
 | 多实例 + 可靠异步 | JobQueue → ARQ/Redis；Consolidation → Celery Beat |
 | L3 多机 | ArchiveStore → S3 |
 | 主库并发 | MemoryRepo → Postgres |

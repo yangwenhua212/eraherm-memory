@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     promotion_importance_threshold: float = 0.6
     recall_top_k_default: int = 8
     recall_pinned_cap: int = 20
+    recall_min_score: float = 0.25  # drop weak hits; 0 = disable gate
     l1_max_items_per_session: int = 200
     extract_on_remember: bool = True
     auto_importance: bool = True
@@ -44,11 +45,12 @@ class Settings(BaseSettings):
     downvote_writes_negative_memory: bool = True
 
     # embedding
-    embedding_backend: str = "hashing"  # hashing | openai
+    embedding_backend: str = "hashing"  # hashing | openai | fastembed
     embedding_dim: int = 256
     embedding_model: str = "text-embedding-3-small"
     embedding_api_key: str | None = None
     embedding_base_url: str = "https://api.openai.com/v1"
+    embedding_cache_dir: Path | None = None  # fastembed model cache (optional)
 
     # ops / observability
     admin_token: str = "dev-admin-token"

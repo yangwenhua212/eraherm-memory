@@ -45,6 +45,7 @@
 ✅ **阶段 8（0.8.0）— MCP 标准化 + 遗忘/压缩**  
 - MCP Server：`python -m app.mcp_server`（见 [docs/MCP.md](docs/MCP.md)、`mcp.json`）  
 - 记忆整理：重要性重排 / 摘要压缩 / 冲突淘汰（`eraherm-consolidate` 或 `POST /v1/admin/consolidate`）  
+- 换 embedding 后全量重嵌：`eraherm-reembed` 或 `POST /v1/admin/reembed`（修复孤儿 `user_id`，不做双轨兜底）  
 - 可选夜间调度：`ERAHERM_CONSOLIDATION_ENABLED=true` + `pip install '.[scheduler]'`  
 
 ## 快速开始
@@ -69,9 +70,22 @@ python -m app.mcp_server
 | 场景 | `ERAHERM_EMBEDDING_BACKEND` | 说明 |
 |------|------------------------------|------|
 | 单测 / 离线 Demo / CI | `hashing`（默认） | 零依赖，**语义召回弱**，中文尤甚 |
-| **Hermes / 生产 / 给别人试用「记忆准不准」** | **`openai`（或兼容端点）** | **禁止继续用 hashing** |
+| **Hermes / 生产（本地中文）** | **`fastembed`** | `BAAI/bge-small-zh-v1.5`，512 维，无外网 API |
+| **Hermes / 生产（云端）** | **`openai`（或兼容端点）** | 需 API Key；**禁止继续用 hashing** |
 
-挂真 Agent 请在 `.env` **写死**为真实向量模型，例如：
+挂真 Agent 请在 `.env` **写死**为真实向量模型。本地中文推荐：
+
+```bash
+pip install 'eraherm-memory[fastembed]'
+```
+
+```env
+ERAHERM_EMBEDDING_BACKEND=fastembed
+ERAHERM_EMBEDDING_MODEL=BAAI/bge-small-zh-v1.5
+ERAHERM_EMBEDDING_DIM=512
+```
+
+或使用 OpenAI 兼容 API：
 
 ```env
 ERAHERM_EMBEDDING_BACKEND=openai
@@ -93,11 +107,13 @@ ERAHERM_EMBEDDING_DIM=1536
 | `ERAHERM_PROACTIVE_ALERTS_ENABLED` | `true` | `false` 关闭预警 |
 | `ERAHERM_PROACTIVE_RECOMMEND_ENABLED` | `true` | `false` 关闭推荐 |
 | `ERAHERM_CONSOLIDATION_ENABLED` | `false` | `true` 进程内定时整理 |
-| `ERAHERM_EMBEDDING_BACKEND` | `hashing`（仅开发） | **`openai`（生产必选）** |
+| `ERAHERM_EMBEDDING_BACKEND` | `hashing`（仅开发） | **`fastembed` 或 `openai`（生产必选）** |
+| `ERAHERM_RECALL_MIN_SCORE` | `0.25` | `0` 关闭门禁；生产可按语料调到 `0.3~0.4` |
 
 - Demo：`http://localhost:8000/demo/`
 - 指标：`GET /v1/metrics`
 - L3：`python -m app.ops.l3_dump`
+- 重嵌：`eraherm-reembed --orphan-user-id <uid>`（换 embedding 后）
 
 ### 评测与样例
 
@@ -116,18 +132,19 @@ ERAHERM_LLM_API_KEY=sk-...
 ### Python SDK
 
 ```python
-from eraherm_memory import MemoryClient
+from eraherm_memory import MemoryClient, HermesMemoryTools
 
 with MemoryClient("http://127.0.0.1:8000") as client:
-    client.remember(content="项目用 FastAPI", user_id="u1", importance=0.9)
-    print(client.recall(user_id="u1", query="技术栈"))
+    tools = HermesMemoryTools(client, user_id="hermes:boss")
+    # 挂进 Hermes：tools.openai_tools() + tools.dispatch(name, args)
+    print(tools.dispatch("memory_remember", {"content": "项目用 FastAPI", "pinned": False}))
+    print(tools.dispatch("memory_recall", {"query": "技术栈"}))
 ```
-
-Hermes 主循环适配器（策略在 Host）：
 
 ```bash
 uvicorn app.main:app --port 8000
-python examples/hermes_memory_adapter.py
+python examples/hermes_builtin_tools.py   # 内置 tools（推荐）
+python examples/hermes_memory_adapter.py  # 主循环 Bridge
 ```
 
 详见 [Hermes 集成指南](docs/HERMES_INTEGRATION.md)。

@@ -47,6 +47,7 @@ def _settings(tmp_path: Path) -> Settings:
         downvote_weight_delta=-0.1,
         downvote_writes_negative_memory=True,
         correct_creates_pinned=False,
+        recall_min_score=0.0,
     )
 
 
@@ -178,6 +179,7 @@ def test_feedback_api(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("ERAHERM_DATABASE_URL", settings.database_url)
     monkeypatch.setenv("ERAHERM_DATA_DIR", str(settings.data_dir))
     monkeypatch.setenv("ERAHERM_EMBEDDING_BACKEND", "hashing")
+    monkeypatch.setenv("ERAHERM_RECALL_MIN_SCORE", "0")
     from app.config import get_settings
 
     get_settings.cache_clear()

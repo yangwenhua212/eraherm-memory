@@ -115,6 +115,21 @@ class QdrantVectorStore:
             hits.append(VectorHit(memory_id=str(mid), score=float(r.score)))
         return hits
 
+    def reset_collection(self, *, vector_size: int | None = None) -> None:
+        """Drop and recreate collection (required when embedding dim changes)."""
+        size = int(vector_size or self._vector_size)
+        self._vector_size = size
+        names = {c.name for c in self._client.get_collections().collections}
+        if self._collection in names:
+            self._client.delete_collection(collection_name=self._collection)
+        self._client.create_collection(
+            collection_name=self._collection,
+            vectors_config=self._qm.VectorParams(
+                size=size,
+                distance=self._qm.Distance.COSINE,
+            ),
+        )
+
     @staticmethod
     def _point_id(memory_id: str) -> str:
         return str(uuid5(NAMESPACE_URL, memory_id))

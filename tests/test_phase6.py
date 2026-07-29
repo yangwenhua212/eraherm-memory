@@ -73,6 +73,7 @@ def test_async_feedback_pending_then_accepted(tmp_path: Path):
         feedback_async=True,
         extract_on_remember=False,
         embedding_dim=64,
+        recall_min_score=0.0,
     )
     repo = SqliteMemoryRepository(settings.database_url)
     memory = MemoryService(
@@ -138,6 +139,7 @@ def test_sdk_and_get_feedback_api(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     monkeypatch.setenv("ERAHERM_DATABASE_URL", f"sqlite:///{db.as_posix()}")
     monkeypatch.setenv("ERAHERM_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("ERAHERM_EMBEDDING_BACKEND", "hashing")
+    monkeypatch.setenv("ERAHERM_RECALL_MIN_SCORE", "0")
     monkeypatch.setenv("ERAHERM_JSON_LOGS", "false")
     get_settings.cache_clear()
     app = create_app()

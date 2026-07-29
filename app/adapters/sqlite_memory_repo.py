@@ -129,3 +129,27 @@ class SqliteMemoryRepository:
                 .distinct()
             )
             return [u for u in db.exec(stmt).all() if u]
+
+    def list_active_memories(
+        self,
+        *,
+        user_id: str | None = None,
+        include_orphans: bool = True,
+        tenant_id: str | None = None,
+        limit: int | None = None,
+    ) -> list[MemoryRow]:
+        with self.session() as db:
+            stmt = select(MemoryRow).where(col(MemoryRow.deleted_at).is_(None))
+            if user_id is not None:
+                stmt = stmt.where(MemoryRow.user_id == user_id)
+            elif not include_orphans:
+                stmt = stmt.where(col(MemoryRow.user_id).is_not(None))
+            if tenant_id is not None:
+                stmt = stmt.where(MemoryRow.tenant_id == tenant_id)
+            stmt = stmt.order_by(col(MemoryRow.updated_at).desc())
+            if limit is not None:
+                stmt = stmt.limit(limit)
+            rows = list(db.exec(stmt).all())
+            for row in rows:
+                db.expunge(row)
+            return rows

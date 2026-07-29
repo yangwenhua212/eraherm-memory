@@ -67,6 +67,7 @@ def settings(tmp_path: Path) -> Settings:
         promotion_importance_threshold=0.6,
         recall_top_k_default=8,
         recall_pinned_cap=20,
+        recall_min_score=0.0,
         l1_max_items_per_session=200,
         auto_importance=True,
         recall_vector_weight=0.7,
@@ -85,6 +86,7 @@ def client(settings: Settings, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setenv("ERAHERM_DATABASE_URL", settings.database_url)
     monkeypatch.setenv("ERAHERM_DATA_DIR", str(settings.data_dir))
     monkeypatch.setenv("ERAHERM_EMBEDDING_BACKEND", "hashing")
+    monkeypatch.setenv("ERAHERM_RECALL_MIN_SCORE", "0")
     from app.config import get_settings
 
     get_settings.cache_clear()
