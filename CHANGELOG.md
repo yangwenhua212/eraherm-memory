@@ -5,14 +5,20 @@
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-07-29
+
 ### Added
 - `fastembed` embedding 适配器（默认 `BAAI/bge-small-zh-v1.5` / 512 维），可选依赖 `eraherm-memory[fastembed]`
-- 召回门禁 `ERAHERM_RECALL_MIN_SCORE`（默认 0.25）与请求字段 `min_score`：低于阈值的命中直接丢弃，避免库少时硬拉低分结果
-- 全量向量迁移：`eraherm-reembed` / `python -m app.ops.reembed` / `POST /v1/admin/reembed`（重算 embedding、修复 `user_id=None` 孤儿、清理悬空向量；**不做双轨 hashing 兜底**）
-- Hermes 内置 Tools：`HermesMemoryTools`（`memory_recall` / `remember` / `pin` / `correct` / `impact`），OpenAI function-calling schema + `dispatch`；`HermesMemoryBridge` 升入 SDK
+- 召回门禁 `ERAHERM_RECALL_MIN_SCORE`（默认 0.25）与请求字段 `min_score`
+- 全量向量迁移：`eraherm-reembed` / `POST /v1/admin/reembed`（修复孤儿 `user_id`，不做双轨 hashing）
+- Hermes 内置 Tools：`HermesMemoryTools` + `HermesMemoryBridge` 升入 SDK
+- 自用回归脚本：`examples/correct_to_evolve.py`（纠正后新事实必须排第一）
 
 ### Changed
-- README 首页重写：生态位（纠正即进化）、差异化对比、**3 分钟 MCP 上手**优先于功能清单
+- README 首页：生态位（纠正即进化）、差异化、3 分钟 MCP 优先
+- Hermes / ROADMAP：以「自用服务器上线检查表」为近期重心
+
+[0.9.0]: https://github.com/yangwenhua212/eraherm-memory/releases/tag/v0.9.0
 
 ## [0.8.0] - 2026-07-29
 
@@ -68,5 +74,3 @@
 
 ### Added
 - FastAPI 骨架、SQLite、L1/L2、sessions / memories / recall / pin
-
-<!-- 远程仓库就绪后，可按 Keep a Changelog 补全 compare/tag 链接 -->

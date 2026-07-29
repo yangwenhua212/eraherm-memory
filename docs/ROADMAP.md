@@ -111,17 +111,24 @@
 
 ---
 
-## 阶段 8+ 后续（按需）
+## 阶段 8+ 已落地
+
+| 项 | 状态 |
+|----|------|
+| `eraherm-reembed` 全量重嵌 | 已实现 |
+| `HermesMemoryTools` 内置 tool | 已实现 |
+| `fastembed` + `recall_min_score` | 已实现（见 CHANGELOG Unreleased / 待收 0.9.0） |
+
+## 阶段 8+ 后续（有触发再做）
 
 | 触发条件 | 动作 |
 |----------|------|
-| 换 embedding / 维度 | `eraherm-reembed` 全量覆盖（已实现，禁止双轨） |
-| Hermes 深集成 | `HermesMemoryTools` 内置 tool（已实现，替代 curl） |
 | 多实例 + 可靠异步 | JobQueue → ARQ/Redis；Consolidation → Celery Beat |
 | L3 多机 | ArchiveStore → S3 |
 | 主库并发 | MemoryRepo → Postgres |
 | 冲突判定要更准 | 可选 LLM 冲突判定 Adapter |
 | MCP 远程共享 | Streamable HTTP transport |
+| 第二个真人用户 / 要宣传 | 再补开源承接（Issue 模板等） |
 
 ---
 
@@ -135,8 +142,12 @@
 
 ---
 
-## 近期下一步
+## 近期下一步（只有你在用时）
 
-对 **Hermes 挂载**：见 [HERMES_INTEGRATION.md](HERMES_INTEGRATION.md) 与 `examples/hermes_memory_adapter.py`。  
-开源脚手架已就绪（**AGPL-3.0** + [COMMERCIAL.md](../COMMERCIAL.md) / CI / CONTRIBUTING）。  
+**重心：Hermes 自用跑通**，不是开源社区运营。
+
+1. 按 [HERMES_INTEGRATION.md §8 服务器上线检查表](HERMES_INTEGRATION.md) 勾完  
+2. 本机：`python examples/correct_to_evolve.py`（纠正即进化一键验）  
+3. 可选：把 Unreleased 收成 **0.9.0** tag，方便服务器 pin 版本  
+
 远程仓库：https://github.com/yangwenhua212/eraherm-memory
