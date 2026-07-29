@@ -1,0 +1,72 @@
+[project]
+name = "eraherm-memory"
+version = "0.8.0"
+description = "EraHerm-Memory — embeddable Agent memory kernel"
+readme = "README.md"
+license = { text = "AGPL-3.0-only" }
+requires-python = ">=3.12"
+authors = [{ name = "EraHerm-Memory Authors" }]
+keywords = [
+  "memory",
+  "agent",
+  "rag",
+  "knowledge-graph",
+  "mcp",
+  "hermes",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: GNU Affero General Public License v3",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Typing :: Typed",
+]
+dependencies = [
+  "fastapi>=0.115.0",
+  "uvicorn[standard]>=0.32.0",
+  "sqlmodel>=0.0.22",
+  "pydantic-settings>=2.6.0",
+  "python-dotenv>=1.0.0",
+  "httpx>=0.27.0",
+  "networkx>=3.3",
+  "alembic>=1.14.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3.0",
+  "fakeredis>=2.26.0",
+]
+redis = ["redis>=5.0.0"]
+qdrant = ["qdrant-client>=1.12.0"]
+neo4j = ["neo4j>=5.26.0"]
+mcp = ["mcp>=1.9.0,<2"]
+scheduler = ["apscheduler>=3.10.0"]
+all = ["eraherm-memory[redis,qdrant,neo4j,mcp,scheduler]"]
+
+[project.urls]
+Changelog = "https://github.com/yangwenhua212/eraherm-memory/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/yangwenhua212/eraherm-memory#readme"
+Issues = "https://github.com/yangwenhua212/eraherm-memory/issues"
+Repository = "https://github.com/yangwenhua212/eraherm-memory"
+Homepage = "https://github.com/yangwenhua212/eraherm-memory"
+[project.scripts]
+eraherm-l3-dump = "app.ops.l3_dump:main"
+eraherm-eval = "evals.harness:main"
+eraherm-consolidate = "app.ops.consolidate:main"
+eraherm-mcp = "app.mcp_server:main"
+
+[build-system]
+requires = ["setuptools>=75.0.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = [".", "sdk"]
+include = ["app*", "eraherm_memory*", "evals*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".", "sdk"]

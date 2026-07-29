@@ -1,0 +1,5 @@
+# Copyright (c) 2026 EraHerm-Memory Authors.
+# SPDX-License-Identifier: AGPL-3.0-only
+# Commercial licensing: see COMMERCIAL.md
+
+"""Ports package — replaceable interfaces."""

@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "eraherm-memory": {
+      "command": "python",
+      "args": ["-m", "app.mcp_server"],
+      "cwd": "D:/bk/agent",
+      "env": {
+        "ERAHERM_DATABASE_URL": "sqlite:///./storage/eraherm.db",
+        "ERAHERM_EMBEDDING_BACKEND": "hashing",
+        "ERAHERM_JSON_LOGS": "false"
+      }
+    }
+  }
+}

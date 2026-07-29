@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<!--
+  Copyright (c) 2026 EraHerm-Memory Authors.
+  SPDX-License-Identifier: AGPL-3.0-only
+  Commercial licensing: see COMMERCIAL.md
+-->
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EraHerm-Memory Demo</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --panel: #1a222c;
+      --text: #e7eef7;
+      --muted: #8b9bb0;
+      --accent: #3d9cf0;
+      --line: #2a3544;
+      --ok: #3ecf8e;
+      --bad: #ff7b7b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: radial-gradient(1200px 600px at 10% -10%, #1b2a3d, var(--bg));
+      color: var(--text);
+      min-height: 100vh;
+    }
+    main { max-width: 960px; margin: 0 auto; padding: 32px 20px 64px; }
+    h1 { font-size: 1.6rem; margin: 0 0 8px; }
+    .sub { color: var(--muted); margin-bottom: 20px; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+    .tab {
+      border: 1px solid var(--line);
+      background: #121820;
+      color: var(--muted);
+      padding: 8px 14px;
+      border-radius: 999px;
+      cursor: pointer;
+    }
+    .tab.active { color: var(--text); border-color: var(--accent); background: #1b2d42; }
+    .panel {
+      background: color-mix(in srgb, var(--panel) 92%, black);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 18px;
+      margin-bottom: 16px;
+    }
+    .hidden { display: none; }
+    label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 6px; }
+    input, textarea, button {
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: #121820;
+      color: var(--text);
+      padding: 10px 12px;
+      font: inherit;
+    }
+    textarea { min-height: 88px; resize: vertical; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+    @media (max-width: 720px) { .row, .row3 { grid-template-columns: 1fr; } }
+    button {
+      cursor: pointer;
+      background: linear-gradient(180deg, #4aa3f5, #2f7fd0);
+      border: none;
+      font-weight: 600;
+      margin-top: 12px;
+    }
+    button.secondary { background: #243041; }
+    button.good { background: #2f8f63; }
+    button.bad { background: #a33b3b; }
+    #svg-wrap {
+      width: 100%; height: 320px; border: 1px dashed var(--line);
+      border-radius: 12px; overflow: hidden; background: #10161d;
+    }
+    svg { width: 100%; height: 100%; }
+    .path-list, .status { margin-top: 12px; color: var(--muted); font-size: 0.92rem; }
+    .ok { color: var(--ok); }
+    .err { color: var(--bad); }
+    code { color: #9fd0ff; }
+    .hits { margin-top: 10px; }
+    .hit {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+      margin-top: 8px;
+      background: #121820;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>EraHerm-Memory Demo</h1>
+    <p class="sub">图谱影响面 + 反馈进化 + 主动预警/关联推荐。API：<code>/v1</code></p>
+    <div class="tabs">
+      <button class="tab active" data-tab="graph" type="button">图谱</button>
+      <button class="tab" data-tab="feedback" type="button">反馈</button>
+      <button class="tab" data-tab="proactive" type="button">预警推荐</button>
+    </div>
+
+    <section id="tab-graph">
+      <div class="panel">
+        <div class="row">
+          <div>
+            <label>user_id</label>
+            <input id="gUser" value="u_demo" />
+          </div>
+          <div>
+            <label>实体名（impact）</label>
+            <input id="entityName" value="A服务" />
+          </div>
+        </div>
+        <label style="margin-top:12px">写入文本</label>
+        <textarea id="gText">A服务依赖B服务和Redis。C服务依赖A服务。D服务依赖C服务。</textarea>
+        <div class="row">
+          <button id="btnExtract" type="button">1. 抽取并入库</button>
+          <button id="btnImpact" class="secondary" type="button">2. 查询影响路径</button>
+        </div>
+        <p id="gStatus" class="status"></p>
+      </div>
+      <div class="panel">
+        <label>路径可视化（inbound = 改 A 会影响谁）</label>
+        <div id="svg-wrap"><svg id="canvas"></svg></div>
+        <ul id="paths" class="path-list"></ul>
+      </div>
+    </section>
+
+    <section id="tab-feedback" class="hidden">
+      <div class="panel">
+        <div class="row">
+          <div>
+            <label>user_id</label>
+            <input id="fUser" value="u_demo" />
+          </div>
+          <div>
+            <label>answer_id</label>
+            <input id="answerId" value="ans_demo_1" />
+          </div>
+        </div>
+        <label style="margin-top:12px">先写入一条（可被纠正的）记忆</label>
+        <textarea id="seedMemory">数据库使用 MySQL</textarea>
+        <button id="btnSeed" type="button">写入记忆</button>
+        <p id="seedInfo" class="status"></p>
+      </div>
+      <div class="panel">
+        <label>Agent 回答文本（可选）</label>
+        <textarea id="answerText">你们用的是 MySQL</textarea>
+        <label style="margin-top:12px">纠正文本（correct 必填）</label>
+        <textarea id="correction">应该是 PostgreSQL 不是 MySQL</textarea>
+        <div class="row3">
+          <button id="btnUp" class="good" type="button">点赞</button>
+          <button id="btnDown" class="bad" type="button">点踩</button>
+          <button id="btnCorrect" type="button">纠正并反思</button>
+        </div>
+        <p id="fStatus" class="status"></p>
+        <button id="btnRecall" class="secondary" type="button">召回验证</button>
+        <input id="recallQuery" value="数据库是 PostgreSQL 吗" style="margin-top:8px" />
+        <div id="hits" class="hits"></div>
+      </div>
+    </section>
+
+    <section id="tab-proactive" class="hidden">
+      <div class="panel">
+        <div class="row">
+          <div>
+            <label>user_id</label>
+            <input id="pUser" value="u_demo" />
+          </div>
+          <div>
+            <label>旧技术栈记忆</label>
+            <input id="pOld" value="后端主栈是 Java 与 Spring Boot" />
+          </div>
+        </div>
+        <label style="margin-top:12px">新记忆（触发预警）</label>
+        <textarea id="pNew">新项目改用 Go 重写网关服务</textarea>
+        <button id="btnAlert" type="button">写入并查看 alerts</button>
+        <p id="pAlertStatus" class="status"></p>
+        <div id="pAlerts" class="hits"></div>
+      </div>
+      <div class="panel">
+        <label>经验记忆（供推荐）</label>
+        <textarea id="pExp">上次把支付超时从3秒调到10秒并加了重试，抖动消失</textarea>
+        <button id="btnExp" class="secondary" type="button">写入经验</button>
+        <label style="margin-top:12px">召回 query</label>
+        <input id="pQuery" value="改超时配置要注意什么" />
+        <button id="btnPRecall" type="button">召回 + recommendations</button>
+        <p id="pRecStatus" class="status"></p>
+        <div id="pRecs" class="hits"></div>
+      </div>
+    </section>
+  </main>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let lastMemoryId = null;
+
+    document.querySelectorAll(".tab").forEach((btn) => {
+      btn.onclick = () => {
+        document.querySelectorAll(".tab").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        const tab = btn.dataset.tab;
+        $("tab-graph").classList.toggle("hidden", tab !== "graph");
+        $("tab-feedback").classList.toggle("hidden", tab !== "feedback");
+        $("tab-proactive").classList.toggle("hidden", tab !== "proactive");
+      };
+    });
+
+    function setStatus(el, msg, ok = true) {
+      el.innerHTML = `<span class="${ok ? "ok" : "err"}">${msg}</span>`;
+    }
+
+    async function extract() {
+      const res = await fetch("/v1/graph/extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: $("gUser").value.trim(), text: $("gText").value.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error?.message || res.statusText);
+      setStatus($("gStatus"), `抽取完成：${data.entities} 实体 / ${data.relations} 关系<br/>${(data.relation_summaries || []).join("<br/>")}`);
+    }
+
+    function renderImpact(data) {
+      const pathsEl = $("paths");
+      const svg = $("canvas");
+      pathsEl.innerHTML = "";
+      svg.innerHTML = "";
+      const width = svg.clientWidth || 900;
+      const height = 320;
+      const nodes = new Map();
+      nodes.set(data.seed.id, { ...data.seed, x: 80, y: height / 2 });
+      data.paths.forEach((p, i) => {
+        const y = ((i + 1) / (data.paths.length + 1)) * height;
+        p.nodes.forEach((n, idx) => {
+          if (!nodes.has(n.id)) {
+            nodes.set(n.id, {
+              ...n,
+              x: 80 + idx * Math.min(220, (width - 160) / Math.max(p.hops, 1)),
+              y,
+            });
+          }
+        });
+        const li = document.createElement("li");
+        li.textContent = `[${p.hops} hop] ${p.nodes.map((n) => n.name).join(" → ")}`;
+        pathsEl.appendChild(li);
+      });
+      data.paths.forEach((p) => {
+        for (let i = 0; i < p.nodes.length - 1; i++) {
+          const a = nodes.get(p.nodes[i].id);
+          const b = nodes.get(p.nodes[i + 1].id);
+          const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+          line.setAttribute("x1", a.x); line.setAttribute("y1", a.y);
+          line.setAttribute("x2", b.x); line.setAttribute("y2", b.y);
+          line.setAttribute("stroke", "#3d9cf0"); line.setAttribute("stroke-width", "2");
+          svg.appendChild(line);
+        }
+      });
+      for (const n of nodes.values()) {
+        const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        c.setAttribute("cx", n.x); c.setAttribute("cy", n.y); c.setAttribute("r", 18);
+        c.setAttribute("fill", n.id === data.seed.id ? "#3ecf8e" : "#243041");
+        c.setAttribute("stroke", "#8b9bb0");
+        const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        t.setAttribute("x", n.x); t.setAttribute("y", n.y + 36);
+        t.setAttribute("text-anchor", "middle"); t.setAttribute("fill", "#e7eef7");
+        t.setAttribute("font-size", "12"); t.textContent = n.name;
+        g.appendChild(c); g.appendChild(t); svg.appendChild(g);
+      }
+    }
+
+    async function impact() {
+      const res = await fetch("/v1/graph/impact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: $("gUser").value.trim(),
+          entity_name: $("entityName").value.trim(),
+          direction: "inbound",
+          max_hops: 2,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error?.message || res.statusText);
+      setStatus($("gStatus"), `影响面：seed=${data.seed.name}，paths=${data.paths.length}` +
+        (data.recommendations?.length ? `，推荐 ${data.recommendations.length} 条` : ""));
+      renderImpact(data);
+    }
+
+    async function seedMemory() {
+      const res = await fetch("/v1/memories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: $("fUser").value.trim(),
+          content: $("seedMemory").value.trim(),
+          importance: 0.9,
+          extract_graph: false,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error?.message || res.statusText);
+      lastMemoryId = data.id;
+      const alerts = (data.alerts || []).map((a) => a.message).join("；");
+      setStatus($("seedInfo"), `已写入 memory_id=${data.id} layer=${data.layer}` + (alerts ? `<br/>alerts: ${alerts}` : ""));
+    }
+
+    async function sendFeedback(type) {
+      const body = {
+        user_id: $("fUser").value.trim(),
+        answer_id: $("answerId").value.trim(),
+        feedback_type: type,
+        answer_text: $("answerText").value.trim(),
+        related_memory_ids: lastMemoryId ? [lastMemoryId] : [],
+      };
+      if (type === "correct") body.correction_text = $("correction").value.trim();
+      const res = await fetch("/v1/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error?.message || res.statusText);
+      const ref = data.reflection;
+      const msg = ref
+        ? `feedback=${data.feedback_id}<br/>status=${ref.status} conf=${ref.confidence}<br/>summary=${ref.summary}<br/>derived=${ref.derived_memory_id || "-"}`
+        : `feedback=${data.feedback_id}（upvote，无 reflection）`;
+      setStatus($("fStatus"), msg);
+    }
+
+    async function recall() {
+      const res = await fetch("/v1/recall", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: $("fUser").value.trim(),
+          query: $("recallQuery").value.trim(),
+          top_k: 5,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error?.message || res.statusText);
+      const box = $("hits");
+      box.innerHTML = "";
+      (data.items || []).forEach((item) => {
+        const div = document.createElement("div");
+        div.className = "hit";
+        div.textContent = `[${item.layer}] ${item.score.toFixed(3)} | ${item.content}`;
+        box.appendChild(div);
+      });
+      (data.recommendations || []).forEach((item) => {
+        const div = document.createElement("div");
+        div.className = "hit";
+        div.textContent = `[推荐/${item.reason}] ${item.score.toFixed(3)} | ${item.content}`;
+        box.appendChild(div);
+      });
+    }
+
+    async function proactiveAlert() {
+      const user = $("pUser").value.trim();
+      await fetch("/v1/memories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: user,
+          content: $("pOld").value.trim(),
+          importance: 0.95,
+          extract_graph: false,
+        }),
+      });
+      const res = await fetch("/v1/memories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: user,
+          content: $("pNew").value.trim(),
+          importance: 0.95,
+          extract_graph: false,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error?.message || res.statusText);
+      const box = $("pAlerts");
+      box.innerHTML = "";
+      (data.alerts || []).forEach((a) => {
+        const div = document.createElement("div");
+        div.className = "hit";
+        div.textContent = `[${a.type}] ${a.severity.toFixed(2)} | ${a.message}`;
+        box.appendChild(div);
+      });
+      setStatus($("pAlertStatus"), `alerts=${(data.alerts || []).length}`);
+    }
+
+    async function writeExp() {
+      const res = await fetch("/v1/memories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: $("pUser").value.trim(),
+          content: $("pExp").value.trim(),
+          importance: 0.95,
+          extract_graph: false,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error?.message || res.statusText);
+      setStatus($("pRecStatus"), `经验已写入 ${data.id}`);
+    }
+
+    async function proactiveRecall() {
+      const res = await fetch("/v1/recall", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: $("pUser").value.trim(),
+          query: $("pQuery").value.trim(),
+          top_k: 3,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error?.message || res.statusText);
+      const box = $("pRecs");
+      box.innerHTML = "";
+      (data.items || []).forEach((item) => {
+        const div = document.createElement("div");
+        div.className = "hit";
+        div.textContent = `[召回] ${item.score.toFixed(3)} | ${item.content}`;
+        box.appendChild(div);
+      });
+      (data.recommendations || []).forEach((item) => {
+        const div = document.createElement("div");
+        div.className = "hit";
+        div.textContent = `[推荐] ${item.score.toFixed(3)} | ${item.content}`;
+        box.appendChild(div);
+      });
+      setStatus($("pRecStatus"), `items=${(data.items||[]).length} recommendations=${(data.recommendations||[]).length}`);
+    }
+
+    $("btnExtract").onclick = async () => { try { await extract(); } catch (e) { setStatus($("gStatus"), e.message, false); } };
+    $("btnImpact").onclick = async () => { try { await impact(); } catch (e) { setStatus($("gStatus"), e.message, false); } };
+    $("btnSeed").onclick = async () => { try { await seedMemory(); } catch (e) { setStatus($("seedInfo"), e.message, false); } };
+    $("btnUp").onclick = async () => { try { await sendFeedback("upvote"); } catch (e) { setStatus($("fStatus"), e.message, false); } };
+    $("btnDown").onclick = async () => { try { await sendFeedback("downvote"); } catch (e) { setStatus($("fStatus"), e.message, false); } };
+    $("btnCorrect").onclick = async () => { try { await sendFeedback("correct"); } catch (e) { setStatus($("fStatus"), e.message, false); } };
+    $("btnRecall").onclick = async () => { try { await recall(); } catch (e) { setStatus($("fStatus"), e.message, false); } };
+    $("btnAlert").onclick = async () => { try { await proactiveAlert(); } catch (e) { setStatus($("pAlertStatus"), e.message, false); } };
+    $("btnExp").onclick = async () => { try { await writeExp(); } catch (e) { setStatus($("pRecStatus"), e.message, false); } };
+    $("btnPRecall").onclick = async () => { try { await proactiveRecall(); } catch (e) { setStatus($("pRecStatus"), e.message, false); } };
+  </script>
+</body>
+</html>

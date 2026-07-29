@@ -1,0 +1,195 @@
+[
+  {
+    "id": "pin_identity_survives",
+    "suite": "pinned",
+    "description": "钉死身份记忆在会话关闭后仍可召回",
+    "steps": [
+      {"op": "session_create", "user_id": "eval_pin"},
+      {
+        "op": "remember",
+        "user_id": "eval_pin",
+        "content": "用户名为 cc",
+        "memory_type": "identity",
+        "pinned": true,
+        "importance": 1.0,
+        "extract_graph": false
+      },
+      {
+        "op": "remember",
+        "user_id": "eval_pin",
+        "content": "今天天气不错",
+        "memory_type": "episode",
+        "importance": 0.1,
+        "extract_graph": false
+      },
+      {"op": "session_close"},
+      {
+        "op": "recall",
+        "user_id": "eval_pin",
+        "query": "用户名是什么",
+        "expect_any_contains": ["cc"]
+      }
+    ]
+  },
+  {
+    "id": "correct_then_recall",
+    "suite": "feedback",
+    "description": "纠正 MySQL→PostgreSQL 后召回命中修订事实",
+    "steps": [
+      {
+        "op": "remember",
+        "user_id": "eval_fb",
+        "content": "数据库使用 MySQL",
+        "importance": 0.9,
+        "extract_graph": false,
+        "save_as": "wrong_mem"
+      },
+      {
+        "op": "feedback",
+        "user_id": "eval_fb",
+        "answer_id": "ans_eval_1",
+        "feedback_type": "correct",
+        "correction_text": "应该是 PostgreSQL 不是 MySQL",
+        "related_from": "wrong_mem",
+        "expect_status": "accepted"
+      },
+      {
+        "op": "recall",
+        "user_id": "eval_fb",
+        "query": "数据库是 PostgreSQL 吗",
+        "expect_any_contains": ["PostgreSQL"]
+      }
+    ]
+  },
+  {
+    "id": "impact_inbound_a",
+    "suite": "graph",
+    "description": "改 A 服务会影响依赖它的 C 服务",
+    "steps": [
+      {
+        "op": "extract",
+        "user_id": "eval_g",
+        "text": "A服务依赖B服务和Redis。C服务依赖A服务。"
+      },
+      {
+        "op": "impact",
+        "user_id": "eval_g",
+        "entity_name": "A服务",
+        "direction": "inbound",
+        "max_hops": 2,
+        "expect_node_names": ["C服务"]
+      }
+    ]
+  },
+  {
+    "id": "impact_outbound_a",
+    "suite": "graph",
+    "description": "A 服务出边应包含 B 与 Redis",
+    "steps": [
+      {
+        "op": "extract",
+        "user_id": "eval_g2",
+        "text": "A服务依赖B服务和Redis。"
+      },
+      {
+        "op": "impact",
+        "user_id": "eval_g2",
+        "entity_name": "A服务",
+        "direction": "outbound",
+        "max_hops": 2,
+        "expect_node_names": ["B服务", "Redis"]
+      }
+    ]
+  },
+  {
+    "id": "promote_fact_recall",
+    "suite": "memory",
+    "description": "高重要性事实写入 L2 后可语义召回",
+    "steps": [
+      {
+        "op": "remember",
+        "user_id": "eval_mem",
+        "content": "EraHerm-Memory 的 API 层采用 FastAPI 实现",
+        "memory_type": "fact",
+        "importance": 0.5,
+        "extract_graph": false
+      },
+      {
+        "op": "recall",
+        "user_id": "eval_mem",
+        "query": "EraHerm 项目的 API 框架技术是什么",
+        "expect_any_contains": ["FastAPI"]
+      }
+    ]
+  },
+  {
+    "id": "two_hop_impact",
+    "suite": "graph",
+    "description": "两跳影响：A←C←D",
+    "steps": [
+      {
+        "op": "extract",
+        "user_id": "eval_g3",
+        "text": "A服务依赖B服务。C服务依赖A服务。D服务依赖C服务。"
+      },
+      {
+        "op": "impact",
+        "user_id": "eval_g3",
+        "entity_name": "A服务",
+        "direction": "inbound",
+        "max_hops": 2,
+        "expect_node_names": ["D服务"]
+      }
+    ]
+  },
+  {
+    "id": "proactive_stack_shift_alert",
+    "suite": "proactive",
+    "description": "Java→Go 切换时 remember 返回 tech_stack_shift 预警",
+    "steps": [
+      {
+        "op": "remember",
+        "user_id": "eval_p7",
+        "content": "后端主栈是 Java 与 Spring Boot",
+        "importance": 0.9,
+        "extract_graph": false
+      },
+      {
+        "op": "remember",
+        "user_id": "eval_p7",
+        "content": "新项目改用 Go 重写网关",
+        "importance": 0.9,
+        "extract_graph": false,
+        "expect_alert_types": ["tech_stack_shift"]
+      }
+    ]
+  },
+  {
+    "id": "proactive_recommend_sidecar",
+    "suite": "proactive",
+    "description": "召回旁路推荐类似改动经验",
+    "steps": [
+      {
+        "op": "remember",
+        "user_id": "eval_p7r",
+        "content": "上次把支付超时从3秒调到10秒并加了重试，抖动消失",
+        "importance": 0.95,
+        "extract_graph": false
+      },
+      {
+        "op": "remember",
+        "user_id": "eval_p7r",
+        "content": "办公室空调温度设定为26度",
+        "importance": 0.9,
+        "extract_graph": false
+      },
+      {
+        "op": "recall",
+        "user_id": "eval_p7r",
+        "query": "改超时配置要注意什么",
+        "top_k": 1,
+        "expect_recommend_contains": ["超时"]
+      }
+    ]
+  }
+]
