@@ -3,77 +3,75 @@
 [![CI](https://github.com/yangwenhua212/eraherm-memory/actions/workflows/ci.yml/badge.svg)](https://github.com/yangwenhua212/eraherm-memory/actions/workflows/ci.yml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
 
-可嵌入任意 Agent 的**记忆内核**：分层记忆、知识图谱、反馈进化。  
-不追求大而全，只做一件事——让 Agent **记得住、推得出、越用越懂你**。
+**可嵌入的记忆内核**——专治 Agent「说过就忘、纠正了还不改」。  
+不是又一个 RAG 全家桶，也不是完整 Agent 框架。
 
 > 仓库：https://github.com/yangwenhua212/eraherm-memory  
 > **许可**：默认 [AGPL-3.0](LICENSE)；闭源商用见 [COMMERCIAL.md](COMMERCIAL.md)。
 
-## 一句话
+---
 
-**EraHerm-Memory = 分层记忆（记准）+ 轻量图谱（推通）+ 反馈反思（进化）**
+## 生态位（30 秒）
 
-## 三大支柱
+> EraHerm-Memory = **记准 · 推通 · 进化**  
+> 主打打磨的是 **「纠正即进化」**：用户说「不对，应该是 X」→ 钉死新事实 → 下次同类问题优先新版本。
 
-| 支柱 | 解决什么 |
-|------|----------|
-| 分层记忆 L1/L2/L3 | 防上下文爆炸，关键信息永不丢 |
-| 知识图谱 | 「改 A 会影响谁」类结构推理 |
-| 反馈闭环 | 纠正 → Reflection → 写回，越用越懂 |
+| 我们坚持 | 我们不做 |
+|----------|----------|
+| 小而美的 **Memory Kernel**，嵌入任意 Host | 规划器 / 工具总线 / 聊天 UI 全家桶 |
+| 标准接口：**MCP**、HTTP、Python SDK | 绑死某一家 Agent 产品 |
+| 决策写进 [ADR](docs/adr/README.md)，可追溯可推翻 | 「口口相传」的架构 |
 
-## 文档导航
+故事素材：为何内核而非框架 → [ADR-0001](docs/adr/0001-kernel-not-full-agent.md)；为何 SQLite 优先 → [ADR-0002](docs/adr/0002-sqlite-first-storage.md)；为何先轻量图 → [ADR-0003](docs/adr/0003-lightweight-graph-before-neo4j.md)。
 
-| 文档 | 说明 |
-|------|------|
-| [技术设计](docs/TECHNICAL_DESIGN.md) | 架构、模块边界、生命周期（主文档） |
-| [数据模型](docs/specs/DATA_MODEL.md) | 表结构、字段、不变量 |
-| [API 规范](docs/specs/API.md) | HTTP 接口契约 |
-| [MCP 接入](docs/MCP.md) | Cursor / Claude Desktop 挂载 |
-| [Hermes 集成](docs/HERMES_INTEGRATION.md) | Host Agent 主循环怎么接记忆 |
-| [扩展指南](docs/specs/EXTENSION.md) | 插件点、替换存储/模型的方式 |
-| [政策说明](docs/specs/POLICIES.md) | 衰减、晋升、Reflection 阈值等语义 |
-| [路线图](docs/ROADMAP.md) | MVP → 长期迭代阶段 |
-| [部署对照](docs/DEPLOYMENT.md) | 默认单机 vs 生产按需升级 |
-| [贡献指南](CONTRIBUTING.md) | 开发环境、PR 约定 |
-| [变更日志](CHANGELOG.md) | 版本记录 |
-| [安全说明](SECURITY.md) | 漏洞上报与信任边界 |
-| [商业许可](COMMERCIAL.md) | AGPL 之外的闭源授权 |
-| [ADR 索引](docs/adr/README.md) | 架构决策记录，保证演进可追溯 |
+---
 
-## 当前状态
+## 和「大而全记忆项目」差在哪
 
-✅ **阶段 8（0.8.0）— MCP 标准化 + 遗忘/压缩**  
-- MCP Server：`python -m app.mcp_server`（见 [docs/MCP.md](docs/MCP.md)、`mcp.json`）  
-- 记忆整理：重要性重排 / 摘要压缩 / 冲突淘汰（`eraherm-consolidate` 或 `POST /v1/admin/consolidate`）  
-- 换 embedding 后全量重嵌：`eraherm-reembed` 或 `POST /v1/admin/reembed`（修复孤儿 `user_id`，不做双轨兜底）  
-- 可选夜间调度：`ERAHERM_CONSOLIDATION_ENABLED=true` + `pip install '.[scheduler]'`  
+| | 常见记忆 / RAG 组件 | **EraHerm-Memory** |
+|--|---------------------|---------------------|
+| 定位 | 向量库 + 检索，或平台功能的一环 | **可替换的记忆内核**（Port/Adapter） |
+| 纠正 | 常常只追加一条新向量，旧错仍在抢排名 | **feedback → Reflection → pinned**，旧版让路 |
+| 结构问题 | 「改 A 会影响谁」常靠提示词硬猜 | **轻量图谱** `impact`（可升 Neo4j） |
+| 集成 | 各家私有 SDK | **MCP 即插即用** + HTTP + Hermes Tools |
+| 演进 | 功能清单越堆越长 | 三支柱做深：L1/L2/L3、图、反馈闭环 |
 
-## 快速开始
+一句话验收：**纠正后，同义再问，必须优先新事实。**  
+（`python -m evals.harness` / Demo 里可走通。）
+
+---
+
+## 3 分钟：MCP 挂上 Cursor / Claude
+
+最推荐的第一印象路径——**不写业务代码，先当内置记忆工具用**。
 
 ```bash
-python -m pip install -e ".[dev,mcp,scheduler]"
-copy .env.example .env
-alembic upgrade head
+git clone https://github.com/yangwenhua212/eraherm-memory.git
+cd eraherm-memory
+python -m pip install -e ".[mcp]"
+copy .env.example .env          # Windows；Unix: cp .env.example .env
+```
+
+把仓库根目录 [`mcp.json`](mcp.json) 合并进 Cursor / Claude Desktop 的 MCP 配置（改 `cwd` 为你的本地路径）。然后：
+
+```bash
+# 可选：先起 HTTP Demo 看闭环
 uvicorn app.main:app --reload --port 8000
+# 浏览器打开 http://localhost:8000/demo/
 ```
 
-MCP（Cursor / Claude Desktop）：
+在对话里直接让模型调用：
 
-```bash
-python -m app.mcp_server
-```
+| Tool | 干什么 |
+|------|--------|
+| `remember` | 存长期事实 |
+| `recall` | 语义召回 |
+| `impact` | 「改 X 会影响谁」 |
+| `consolidate` | 整理压缩（运维向） |
 
-配置见仓库根目录 [`mcp.json`](mcp.json)。
+完整说明：[docs/MCP.md](docs/MCP.md)。
 
-### ⚠ 生产 Embedding（挂真 Agent 必读）
-
-| 场景 | `ERAHERM_EMBEDDING_BACKEND` | 说明 |
-|------|------------------------------|------|
-| 单测 / 离线 Demo / CI | `hashing`（默认） | 零依赖，**语义召回弱**，中文尤甚 |
-| **Hermes / 生产（本地中文）** | **`fastembed`** | `BAAI/bge-small-zh-v1.5`，512 维，无外网 API |
-| **Hermes / 生产（云端）** | **`openai`（或兼容端点）** | 需 API Key；**禁止继续用 hashing** |
-
-挂真 Agent 请在 `.env` **写死**为真实向量模型。本地中文推荐：
+**挂真 Agent / 对外演示语义召回时**，把 MCP `env` 改成真实 embedding（禁止长期 `hashing`）：
 
 ```bash
 pip install 'eraherm-memory[fastembed]'
@@ -83,81 +81,75 @@ pip install 'eraherm-memory[fastembed]'
 ERAHERM_EMBEDDING_BACKEND=fastembed
 ERAHERM_EMBEDDING_MODEL=BAAI/bge-small-zh-v1.5
 ERAHERM_EMBEDDING_DIM=512
+ERAHERM_RECALL_MIN_SCORE=0.25
 ```
 
-或使用 OpenAI 兼容 API：
+---
 
-```env
-ERAHERM_EMBEDDING_BACKEND=openai
-ERAHERM_EMBEDDING_API_KEY=sk-...
-ERAHERM_EMBEDDING_BASE_URL=https://api.openai.com/v1
-ERAHERM_EMBEDDING_MODEL=text-embedding-3-small
-ERAHERM_EMBEDDING_DIM=1536
-```
+## 三大支柱（只做这三件事）
 
-也可用任意 OpenAI 兼容网关（本地 vLLM / Ollama 代理等）：改 `BASE_URL` + `MODEL` 即可，**不要**用 `hashing` 上线。  
-换 embedding 后端后向量空间不兼容，需清空或重建向量库后再写入记忆。详见 [DEPLOYMENT.md](docs/DEPLOYMENT.md)、[HERMES_INTEGRATION.md](docs/HERMES_INTEGRATION.md)。
+| 支柱 | 解决什么 |
+|------|----------|
+| **分层记忆 L1/L2/L3** | 会话热数据 / 长期事实 / 冷归档，关键钉死不丢 |
+| **轻量知识图谱** | 结构推理：「改 A 会影响谁」 |
+| **反馈闭环** | 点赞 / 点踩 / **纠正** → Reflection → 写回并优先 |
 
-| 配置 | 默认 | 升级 |
-|------|------|------|
-| `ERAHERM_SESSION_CACHE_BACKEND` | `memory` | `redis` |
-| `ERAHERM_VECTOR_BACKEND` | `sqlite` | `qdrant` |
-| `ERAHERM_GRAPH_BACKEND` | `networkx` | `neo4j` |
-| `ERAHERM_FEEDBACK_ASYNC` | `false` | `true` |
-| `ERAHERM_PROACTIVE_ALERTS_ENABLED` | `true` | `false` 关闭预警 |
-| `ERAHERM_PROACTIVE_RECOMMEND_ENABLED` | `true` | `false` 关闭推荐 |
-| `ERAHERM_CONSOLIDATION_ENABLED` | `false` | `true` 进程内定时整理 |
-| `ERAHERM_EMBEDDING_BACKEND` | `hashing`（仅开发） | **`fastembed` 或 `openai`（生产必选）** |
-| `ERAHERM_RECALL_MIN_SCORE` | `0.25` | `0` 关闭门禁；生产可按语料调到 `0.3~0.4` |
+当前版本 **0.8.x**：MCP、整理压缩、`eraherm-reembed` 全量重嵌、Hermes 内置 Tools（`HermesMemoryTools`）。详见 [CHANGELOG](CHANGELOG.md)、[ROADMAP](docs/ROADMAP.md)。
 
-- Demo：`http://localhost:8000/demo/`
-- 指标：`GET /v1/metrics`
-- L3：`python -m app.ops.l3_dump`
-- 重嵌：`eraherm-reembed --orphan-user-id <uid>`（换 embedding 后）
+---
 
-### 评测与样例
+## HTTP / SDK 快速开始
 
 ```bash
-python -m evals.harness
-python examples/minimal_agent.py
+python -m pip install -e ".[dev,mcp,scheduler]"
+copy .env.example .env
+alembic upgrade head
+uvicorn app.main:app --reload --port 8000
 ```
-
-可选 LLM（抽取 + Reflection，失败回落规则/启发式）：
-
-```env
-ERAHERM_LLM_BACKEND=openai
-ERAHERM_LLM_API_KEY=sk-...
-```
-
-### Python SDK
 
 ```python
 from eraherm_memory import MemoryClient, HermesMemoryTools
 
 with MemoryClient("http://127.0.0.1:8000") as client:
     tools = HermesMemoryTools(client, user_id="hermes:boss")
-    # 挂进 Hermes：tools.openai_tools() + tools.dispatch(name, args)
-    print(tools.dispatch("memory_remember", {"content": "项目用 FastAPI", "pinned": False}))
-    print(tools.dispatch("memory_recall", {"query": "技术栈"}))
+    tools.dispatch("memory_remember", {"content": "数据库用 PostgreSQL", "pinned": True})
+    print(tools.dispatch("memory_recall", {"query": "我们用什么库"}))
 ```
 
-```bash
-uvicorn app.main:app --port 8000
-python examples/hermes_builtin_tools.py   # 内置 tools（推荐）
-python examples/hermes_memory_adapter.py  # 主循环 Bridge
-```
+- Hermes 深集成（替代 curl）：[HERMES_INTEGRATION.md](docs/HERMES_INTEGRATION.md)  
+- 示例：`python examples/hermes_builtin_tools.py`  
+- 换 embedding 后重建向量：`eraherm-reembed --orphan-user-id <uid>`（[DEPLOYMENT.md §3.1](docs/DEPLOYMENT.md)）  
+- 评测：`python -m evals.harness` · 测试：`python -m pytest -q`
 
-详见 [Hermes 集成指南](docs/HERMES_INTEGRATION.md)。
+### 生产配置要点
 
-```bash
-python -m pytest -q
-```
+| 配置 | 开发默认 | 生产 / Hermes |
+|------|----------|----------------|
+| `ERAHERM_EMBEDDING_BACKEND` | `hashing` | **`fastembed` 或 `openai`** |
+| `ERAHERM_RECALL_MIN_SCORE` | `0.25` | 可调 `0.3~0.4`；`0` 关闭 |
+| 会话 / 向量 / 图 | memory / sqlite / networkx | 按需 Redis / Qdrant / Neo4j |
+
+完整对照：[DEPLOYMENT.md](docs/DEPLOYMENT.md)。
+
+---
+
+## 文档导航
+
+| 想了解… | 去读 |
+|---------|------|
+| 设计哲学与生命周期 | [技术设计](docs/TECHNICAL_DESIGN.md) |
+| **为什么这样选** | [ADR 索引](docs/adr/README.md) |
+| MCP / Hermes / 部署 | [MCP](docs/MCP.md) · [Hermes](docs/HERMES_INTEGRATION.md) · [部署](docs/DEPLOYMENT.md) |
+| 契约与扩展 | [API](docs/specs/API.md) · [数据模型](docs/specs/DATA_MODEL.md) · [扩展](docs/specs/EXTENSION.md) · [政策](docs/specs/POLICIES.md) |
+| 参与与许可 | [CONTRIBUTING](CONTRIBUTING.md) · [SECURITY](SECURITY.md) · [COMMERCIAL](COMMERCIAL.md) |
+
+---
 
 ## 许可
 
 默认 **[AGPL-3.0](LICENSE)** © EraHerm-Memory Authors。
 
-- 开源使用（含网络服务须提供对应源码）：遵守 AGPL-3.0 即可免费使用  
+- 开源使用（含网络服务须提供对应源码）：遵守 AGPL-3.0  
 - 闭源 / 专有商用：见 **[COMMERCIAL.md](COMMERCIAL.md)**  
 
-参与贡献见 [CONTRIBUTING.md](CONTRIBUTING.md)；安全问题见 [SECURITY.md](SECURITY.md)。
+欢迎开 Issue / PR：先跑通「纠正后再召回」，再谈功能清单。

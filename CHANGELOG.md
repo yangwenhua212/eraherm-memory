@@ -11,6 +11,9 @@
 - 全量向量迁移：`eraherm-reembed` / `python -m app.ops.reembed` / `POST /v1/admin/reembed`（重算 embedding、修复 `user_id=None` 孤儿、清理悬空向量；**不做双轨 hashing 兜底**）
 - Hermes 内置 Tools：`HermesMemoryTools`（`memory_recall` / `remember` / `pin` / `correct` / `impact`），OpenAI function-calling schema + `dispatch`；`HermesMemoryBridge` 升入 SDK
 
+### Changed
+- README 首页重写：生态位（纠正即进化）、差异化对比、**3 分钟 MCP 上手**优先于功能清单
+
 ## [0.8.0] - 2026-07-29
 
 ### Added
