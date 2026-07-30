@@ -11,7 +11,10 @@
 | `decay_lambda_default` | `0.05` | 按天指数衰减系数 |
 | `promotion_importance_threshold` | `0.6` | 会话结束晋升 L2 的重要性下限 |
 | `recall_top_k_default` | `8` | 默认召回条数 |
-| `recall_pinned_cap` | `20` | 召回时强制附带的钉死条数上限 |
+| `recall_pinned_cap` | `20` | 参与召回的钉死条数扫描上限 |
+| `recall_min_score` | `0.25` | 最终分低于此丢弃 |
+| `recall_min_score_no_lexical` | `0.38` | **零词法重叠**时的更高门槛（压制弱相关假阳性） |
+| `recall_pinned_score_boost` | `0.05` | 钉死仅作排序加权，**不再无条件置顶** |
 | `extract_on_remember` | `true` | 写入时是否抽图 |
 | `l1_max_items_per_session` | `200` | 超出则淘汰最低分 |
 | `auto_importance` | `true` | 用启发式抬升 importance（取 max(provided, heuristic)） |
@@ -47,7 +50,7 @@
 | `reflection_confidence_threshold` | `0.7` | 低于此不写 L2 |
 | `upvote_weight_delta` | `+0.05` | |
 | `downvote_weight_delta` | `-0.1` | |
-| `correct_creates_pinned` | `false` | 纠正默认不钉死；identity 类可例外 |
+| `correct_creates_pinned` | `true` | 纠正默认钉死新事实（与 `.env.example` 一致） |
 | `downvote_writes_negative_memory` | `true` | 点踩写 negative 类型 |
 
 ### Reflection 最低产出字段

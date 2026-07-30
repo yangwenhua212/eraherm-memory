@@ -78,6 +78,9 @@ class RecallItem:
     score: float
     pinned: bool
     layer: str
+    relevance: float = 0.0
+    lexical: float = 0.0
+    vector_sim: float = 0.0
 
 
 @dataclass
@@ -335,6 +338,9 @@ class MemoryService:
                 score=score,
                 pinned=row.pinned,
                 layer="L2",
+                relevance=relevance,
+                lexical=lex,
+                vector_sim=sim,
             )
 
         # Also include pinned L2 not returned by vector top list
@@ -352,9 +358,9 @@ class MemoryService:
                     decay_lambda=decay,
                     now=now,
                 )
-                sim = cosine(query_vec, self.embedding.embed([row.content])[0])
+                sim = _clamp01(cosine(query_vec, self.embedding.embed([row.content])[0]))
                 lex = _lexical_similarity(row.content, tokens)
-                relevance = vector_weight * _clamp01(sim) + lexical_weight * lex
+                relevance = vector_weight * sim + lexical_weight * lex
                 by_id[row.id] = RecallItem(
                     id=row.id,
                     content=row.content,
@@ -362,6 +368,9 @@ class MemoryService:
                     score=base * (0.15 + 0.85 * relevance),
                     pinned=True,
                     layer="L2",
+                    relevance=relevance,
+                    lexical=lex,
+                    vector_sim=sim,
                 )
 
         # L1 session items (on-the-fly embedding)
@@ -374,7 +383,7 @@ class MemoryService:
                     decay_lambda=lam,
                     now=now,
                 )
-                sim = cosine(query_vec, self.embedding.embed([item.content])[0])
+                sim = _clamp01(cosine(query_vec, self.embedding.embed([item.content])[0]))
                 lex = _lexical_similarity(item.content, tokens)
                 relevance = vector_weight * _clamp01(sim) + lexical_weight * lex
                 score = base * (0.15 + 0.85 * relevance)
@@ -388,35 +397,32 @@ class MemoryService:
                     score=score,
                     pinned=item.pinned,
                     layer="L1",
+                    relevance=relevance,
+                    lexical=lex,
+                    vector_sim=sim,
                 )
 
-        candidates = list(by_id.values())
-        if threshold > 0:
-            # Drop weak / hard-pulled hits (incl. pinned with near-zero relevance).
-            candidates = [c for c in candidates if c.score >= threshold]
-
-        pinned_items = [c for c in candidates if c.pinned] if include_pinned else []
-        pinned_items = sorted(pinned_items, key=lambda x: x.score, reverse=True)[
-            : self.settings.recall_pinned_cap
+        boost = self.settings.recall_pinned_score_boost
+        no_lex_floor = self.settings.recall_min_score_no_lexical
+        candidates = [
+            c
+            for c in by_id.values()
+            if _passes_recall_gates(
+                score=c.score,
+                lexical=c.lexical,
+                min_score=threshold,
+                min_score_no_lexical=no_lex_floor,
+            )
         ]
-        pinned_ids = {p.id for p in pinned_items}
-
-        rest = sorted(
-            [c for c in candidates if c.id not in pinned_ids],
-            key=lambda x: x.score,
+        # Rank by score; pinned only gets a mild tie-break boost (no hard prepend —
+        # avoids identity/db/food pinned fighting for unrelated queries).
+        if not include_pinned:
+            candidates = [c for c in candidates if not c.pinned]
+        candidates.sort(
+            key=lambda x: x.score + (boost if x.pinned and include_pinned else 0.0),
             reverse=True,
         )
-
-        merged: list[RecallItem] = list(pinned_items)
-        for item in rest:
-            if len(merged) >= top_k:
-                break
-            merged.append(item)
-
-        if include_pinned and len(pinned_items) > top_k:
-            result = pinned_items[: self.settings.recall_pinned_cap]
-        else:
-            result = merged[: max(top_k, len(pinned_items))]
+        result = candidates[:top_k]
 
         self._touch_access([i.id for i in result if i.layer == "L2"])
         return result
@@ -547,9 +553,33 @@ def _lexical_similarity(content: str, tokens: list[str]) -> float:
         return 0.0
     hay = content.lower()
     hits = sum(1 for t in tokens if t in hay)
-    return hits / len(tokens)
+    if hits:
+        return hits / len(tokens)
+    # CJK often arrives as one unsegmented token — use character bigrams.
+    joined = "".join(tokens)
+    cjk = [ch for ch in joined if "\u4e00" <= ch <= "\u9fff"]
+    if len(cjk) >= 2:
+        bigrams = {"".join(cjk[i : i + 2]) for i in range(len(cjk) - 1)}
+        shared = sum(1 for bg in bigrams if bg in hay)
+        return shared / len(bigrams) if bigrams else 0.0
+    return 0.0
 
 
 def _clamp01(x: float) -> float:
     # Cosine can be negative for hashing collisions; floor at 0 for ranking blend.
     return max(0.0, min(1.0, x))
+
+
+def _passes_recall_gates(
+    *,
+    score: float,
+    lexical: float,
+    min_score: float,
+    min_score_no_lexical: float,
+) -> bool:
+    """Absolute score gate; raise the bar when there is zero token overlap."""
+    if min_score > 0 and score < min_score:
+        return False
+    if lexical <= 0 and min_score_no_lexical > 0 and score < min_score_no_lexical:
+        return False
+    return True
