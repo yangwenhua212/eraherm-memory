@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     recall_top_k_default: int = 8
     recall_pinned_cap: int = 20
     recall_min_score: float = 0.25  # drop weak hits; 0 = disable gate
+    # When query shares no tokens with content, require a higher final score
+    # (cuts pure-vector near-misses like「服务器配置」→ 数据库偏好).
+    recall_min_score_no_lexical: float = 0.38
+    # Mild boost so equally relevant pinned facts win ties (not a hard prepend).
+    recall_pinned_score_boost: float = 0.05
     l1_max_items_per_session: int = 200
     extract_on_remember: bool = True
     auto_importance: bool = True
@@ -41,7 +46,7 @@ class Settings(BaseSettings):
     reflection_confidence_threshold: float = 0.7
     upvote_weight_delta: float = 0.05
     downvote_weight_delta: float = -0.1
-    correct_creates_pinned: bool = False
+    correct_creates_pinned: bool = True
     downvote_writes_negative_memory: bool = True
 
     # embedding
