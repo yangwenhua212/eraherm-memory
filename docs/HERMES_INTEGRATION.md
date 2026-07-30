@@ -186,13 +186,24 @@ tools = HermesMemoryTools(MemoryClient("http://127.0.0.1:8000"), user_id="hermes
 
 - [ ] 换词能召回已有喜好/身份  
 - [ ] 故意答错 → 纠正 → 同义再问 → **新事实排第一**  
-- [ ] 完全不相关的问题：`items` 为空或低于门禁（不硬拉）
+- [ ] 完全不相关的问题：`items` 为空或低于门禁（不硬拉）  
+- [ ] 弱相关（如「服务器配置」）不该硬蹭到数据库偏好  
+- [ ] 多条 pinned（身份/库/口味）问「用户名」应命中身份，而非别的钉死项  
 
 本地一键脚本（仓库内）：
 
 ```bash
 uvicorn app.main:app --port 8000
 python examples/correct_to_evolve.py --base-url http://127.0.0.1:8000
+```
+
+相关配置（0.9+）：
+
+```env
+ERAHERM_RECALL_MIN_SCORE=0.25
+ERAHERM_RECALL_MIN_SCORE_NO_LEXICAL=0.38
+ERAHERM_RECALL_PINNED_SCORE_BOOST=0.05
+ERAHERM_CORRECT_CREATES_PINNED=true
 ```
 
 ---

@@ -128,6 +128,8 @@ with MemoryClient("http://127.0.0.1:8000") as client:
 |------|----------|----------------|
 | `ERAHERM_EMBEDDING_BACKEND` | `hashing` | **`fastembed` 或 `openai`** |
 | `ERAHERM_RECALL_MIN_SCORE` | `0.25` | 可调 `0.3~0.4`；`0` 关闭 |
+| `ERAHERM_RECALL_MIN_SCORE_NO_LEXICAL` | `0.38` | 零词法命中时的更高门槛 |
+| `ERAHERM_CORRECT_CREATES_PINNED` | `true` | `false` 纠正不钉死 |
 | 会话 / 向量 / 图 | memory / sqlite / networkx | 按需 Redis / Qdrant / Neo4j |
 
 完整对照：[DEPLOYMENT.md](docs/DEPLOYMENT.md)。
