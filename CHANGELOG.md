@@ -5,12 +5,17 @@
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-07-31
+
 ### Added
 - 召回：`ERAHERM_RECALL_MIN_SCORE_NO_LEXICAL`（零词法重叠时抬高门槛，压制弱相关假阳性）
 - 召回：CJK 词法改用字符 bigram；pinned 改为 `score + boost` 排序，取消无条件置顶（减轻多钉死串扰）
+- 开源贡献入口：Issue 模板（docs / good first issue）、[GOOD_FIRST_ISSUES.md](docs/community/GOOD_FIRST_ISSUES.md)、CONTRIBUTING 补强
 
 ### Changed
 - `correct_creates_pinned` 代码默认改为 `true`（与 `.env.example` 对齐）
+
+[0.9.1]: https://github.com/yangwenhua212/eraherm-memory/releases/tag/v0.9.1
 
 ## [0.9.0] - 2026-07-29
 

@@ -94,7 +94,9 @@ ERAHERM_RECALL_MIN_SCORE=0.25
 | **轻量知识图谱** | 结构推理：「改 A 会影响谁」 |
 | **反馈闭环** | 点赞 / 点踩 / **纠正** → Reflection → 写回并优先 |
 
-当前版本 **0.9.0**：MCP、整理压缩、`eraherm-reembed`、Hermes 内置 Tools、`correct_to_evolve` 自测脚本。详见 [CHANGELOG](CHANGELOG.md)、[ROADMAP](docs/ROADMAP.md)。
+当前版本 **0.9.1**：MCP、整理压缩、`eraherm-reembed`、Hermes 内置 Tools、召回假阳性/多 pinned 修复。详见 [CHANGELOG](CHANGELOG.md)、[ROADMAP](docs/ROADMAP.md)。
+
+想贡献？请读 [CONTRIBUTING.md](CONTRIBUTING.md)，Issues 筛选标签 **`good first issue`**。
 
 ---
 
@@ -144,7 +146,7 @@ with MemoryClient("http://127.0.0.1:8000") as client:
 | **为什么这样选** | [ADR 索引](docs/adr/README.md) |
 | MCP / Hermes / 部署 | [MCP](docs/MCP.md) · [Hermes](docs/HERMES_INTEGRATION.md) · [部署](docs/DEPLOYMENT.md) |
 | 契约与扩展 | [API](docs/specs/API.md) · [数据模型](docs/specs/DATA_MODEL.md) · [扩展](docs/specs/EXTENSION.md) · [政策](docs/specs/POLICIES.md) |
-| 参与与许可 | [CONTRIBUTING](CONTRIBUTING.md) · [SECURITY](SECURITY.md) · [COMMERCIAL](COMMERCIAL.md) |
+| 参与与许可 | [CONTRIBUTING](CONTRIBUTING.md) · [Good First Issues 草稿](docs/community/GOOD_FIRST_ISSUES.md) · [SECURITY](SECURITY.md) · [COMMERCIAL](COMMERCIAL.md) |
 
 ---
 
