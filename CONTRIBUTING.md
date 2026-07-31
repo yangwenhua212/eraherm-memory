@@ -2,6 +2,8 @@
 
 感谢关注 EraHerm-Memory。本仓库是 **可嵌入的记忆内核**，不是完整 Agent 框架（见 [ADR 0001](docs/adr/0001-kernel-not-full-agent.md)）。
 
+欢迎提 Issue / PR。不会写代码也可以从 **文档与示例** 开始（见下方 Good First Issue）。
+
 ## 许可（请先读）
 
 - 项目默认许可证：**[AGPL-3.0-only](LICENSE)**
@@ -14,16 +16,26 @@
 
 若不能接受第 2 点，请在 PR 描述中写明；该贡献可能无法合入主干。
 
-## 开发环境
+## 5 分钟跑通
 
 要求：Python **≥ 3.12**
 
 ```bash
-python -m pip install -e ".[dev,mcp,scheduler]"
-copy .env.example .env   # Windows；Unix: cp .env.example .env
+git clone https://github.com/yangwenhua212/eraherm-memory.git
+cd eraherm-memory
+python -m pip install -e ".[dev,mcp]"
+cp .env.example .env          # Windows: copy .env.example .env
 alembic upgrade head
 python -m pytest -q
 python -m evals.harness
+```
+
+可选 Demo：
+
+```bash
+uvicorn app.main:app --reload --port 8000
+# 浏览器 http://localhost:8000/demo/
+python examples/correct_to_evolve.py
 ```
 
 不要提交 `.env`、数据库文件、`storage/` 下的运行时数据。
@@ -38,10 +50,23 @@ python -m evals.harness
 
 （可用 `python scripts/add_license_headers.py` 批量补齐。）
 
+## Good First Issue（适合第一次贡献）
+
+在 Issues 里筛选标签 **`good first issue`**，或用模板「Good first issue / Docs」开新题。方向示例：
+
+| 方向 | 例子 | 验收 |
+|------|------|------|
+| 文档 | README / MCP.md 笔误、过时路径、缺一步安装说明 | 按文档能从零跑通 |
+| 示例 | 补一段 Hermes / MCP 配置注释、修正 `mcp.json` 示例路径 | 示例可复制即用 |
+| 测试 | 给边界召回加 1 条 eval case（`evals/cases.json`） | `python -m evals.harness` 绿 |
+| 文案 | 把含糊错误信息改清楚（不改 API 字段名） | 单测仍过 |
+
+更完整的待办清单草稿：[docs/community/GOOD_FIRST_ISSUES.md](docs/community/GOOD_FIRST_ISSUES.md)（维护者可据此批量开 Issue）。
+
 ## 提交前检查
 
 1. `python -m pytest -q` 通过  
-2. `python -m evals.harness` 全绿（改了召回/反馈/图谱/整理时必跑）  
+2. 改了召回 / 反馈 / 图谱 / 整理时：再跑 `python -m evals.harness`（建议再跑 `python examples/correct_to_evolve.py`）  
 3. 公共 API 变更同步：`docs/specs/API.md`、必要时 `CHANGELOG.md` `[Unreleased]`  
 4. 架构取舍写 ADR（`docs/adr/`），不要只改代码不留决策  
 

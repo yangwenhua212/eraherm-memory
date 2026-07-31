@@ -1,0 +1,9 @@
+---
+blank_issues_enabled: true
+contact_links:
+  - name: 安全问题
+    url: https://github.com/yangwenhua212/eraherm-memory/blob/main/SECURITY.md
+    about: 请勿在公开 Issue 披露可利用细节
+  - name: 讨论 / 使用问题
+    url: https://github.com/yangwenhua212/eraherm-memory/discussions
+    about: 非缺陷类问答可开 Discussions（若未开启则用 Issue）
