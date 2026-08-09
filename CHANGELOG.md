@@ -5,6 +5,9 @@
 
 ## [Unreleased]
 
+### Changed
+- 许可从 AGPL-3.0 + 商业双许可改为 **MIT**（[ADR 0009](docs/adr/0009-mit-license.md)）：底层内核要扩散生态，上层完整产品（HxSync）仍保留 AGPL-3.0。
+
 ## [0.9.1] - 2026-07-31
 
 ### Added

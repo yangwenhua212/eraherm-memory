@@ -6,15 +6,12 @@
 
 ## 许可（请先读）
 
-- 项目默认许可证：**[AGPL-3.0-only](LICENSE)**
-- 闭源商用另见：**[COMMERCIAL.md](COMMERCIAL.md)**（双许可）
+- 项目默认许可证：**[MIT](LICENSE)**——可自由使用、修改、分发、商用，只需保留版权声明与许可声明。
+- 注意：上层完整产品（如 HxSync）仍保留 AGPL-3.0 保护；本仓库作为底层模块采用 MIT 扩散。
 
 提交 Pull Request 即表示你同意：
 
-1. 你的贡献以 **AGPL-3.0-only** 授权给项目及下游用户；并且  
-2. 授予版权方将你的贡献纳入 **商业再许可** 的非独占权利（维持双许可所必需）。
-
-若不能接受第 2 点，请在 PR 描述中写明；该贡献可能无法合入主干。
+1. 你的贡献以 **MIT** 授权给项目及下游用户。
 
 ## 5 分钟跑通
 
@@ -43,9 +40,8 @@ python examples/correct_to_evolve.py
 新增 `.py` 文件请保留文件头：
 
 ```python
-# Copyright (c) 2026 EraHerm-Memory Authors.
-# SPDX-License-Identifier: AGPL-3.0-only
-# Commercial licensing: see COMMERCIAL.md
+# Copyright (c) 2026 Wenhua Yang (杨文华)
+# SPDX-License-Identifier: MIT
 ```
 
 （可用 `python scripts/add_license_headers.py` 批量补齐。）

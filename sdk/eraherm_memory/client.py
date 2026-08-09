@@ -1,6 +1,5 @@
-# Copyright (c) 2026 EraHerm-Memory Authors.
-# SPDX-License-Identifier: AGPL-3.0-only
-# Commercial licensing: see COMMERCIAL.md
+# Copyright (c) 2026 Wenhua Yang (杨文华)
+# SPDX-License-Identifier: MIT
 
 """Thin HTTP SDK for EraHerm-Memory kernel."""
 

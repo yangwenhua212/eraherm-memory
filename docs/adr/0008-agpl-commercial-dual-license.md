@@ -1,6 +1,6 @@
 # ADR 0008：AGPL-3.0 与商业双许可
 
-- 状态：Accepted
+- 状态：Superseded（被 [ADR 0009](0009-mit-license.md) 取代：许可改为 MIT）
 - 日期：2026-07-29
 
 ## 上下文

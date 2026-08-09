@@ -3,9 +3,9 @@ name = "eraherm-memory"
 version = "0.9.1"
 description = "EraHerm-Memory — embeddable Agent memory kernel"
 readme = "README.md"
-license = { text = "AGPL-3.0-only" }
+license = "MIT"
 requires-python = ">=3.12"
-authors = [{ name = "EraHerm-Memory Authors" }]
+authors = [{ name = "杨文华 (Wenhua Yang)", email = "yangwenhua212@users.noreply.github.com" }]
 keywords = [
   "memory",
   "agent",
@@ -17,7 +17,6 @@ keywords = [
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",
-  "License :: OSI Approved :: GNU Affero General Public License v3",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
@@ -62,7 +61,7 @@ eraherm-reembed = "app.ops.reembed:main"
 eraherm-mcp = "app.mcp_server:main"
 
 [build-system]
-requires = ["setuptools>=75.0.0"]
+requires = ["setuptools>=77.0.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]

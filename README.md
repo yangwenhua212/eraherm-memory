@@ -1,13 +1,13 @@
 # EraHerm-Memory
 
 [![CI](https://github.com/yangwenhua212/eraherm-memory/actions/workflows/ci.yml/badge.svg)](https://github.com/yangwenhua212/eraherm-memory/actions/workflows/ci.yml)
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **可嵌入的记忆内核**——专治 Agent「说过就忘、纠正了还不改」。  
 不是又一个 RAG 全家桶，也不是完整 Agent 框架。
 
 > 仓库：https://github.com/yangwenhua212/eraherm-memory  
-> **许可**：默认 [AGPL-3.0](LICENSE)；闭源商用见 [COMMERCIAL.md](COMMERCIAL.md)。
+> **许可**：**[MIT](LICENSE)**——可自由使用、修改、商用（保留版权声明即可）。
 
 ---
 
@@ -146,15 +146,16 @@ with MemoryClient("http://127.0.0.1:8000") as client:
 | **为什么这样选** | [ADR 索引](docs/adr/README.md) |
 | MCP / Hermes / 部署 | [MCP](docs/MCP.md) · [Hermes](docs/HERMES_INTEGRATION.md) · [部署](docs/DEPLOYMENT.md) |
 | 契约与扩展 | [API](docs/specs/API.md) · [数据模型](docs/specs/DATA_MODEL.md) · [扩展](docs/specs/EXTENSION.md) · [政策](docs/specs/POLICIES.md) |
-| 参与与许可 | [CONTRIBUTING](CONTRIBUTING.md) · [Good First Issues 草稿](docs/community/GOOD_FIRST_ISSUES.md) · [SECURITY](SECURITY.md) · [COMMERCIAL](COMMERCIAL.md) |
+| 参与与许可 | [CONTRIBUTING](CONTRIBUTING.md) · [Good First Issues 草稿](docs/community/GOOD_FIRST_ISSUES.md) · [SECURITY](SECURITY.md) |
 
 ---
 
 ## 许可
 
-默认 **[AGPL-3.0](LICENSE)** © EraHerm-Memory Authors。
+**[MIT](LICENSE)** © 2026 杨文华 (Wenhua Yang)。
 
-- 开源使用（含网络服务须提供对应源码）：遵守 AGPL-3.0  
-- 闭源 / 专有商用：见 **[COMMERCIAL.md](COMMERCIAL.md)**  
+- 可自由使用、修改、分发、商用，只需保留版权声明与许可声明（MIT 全文见 [LICENSE](LICENSE)）。
+- MIT 不是「放弃著作权」：你仍然保留署名权与版权声明要求。
+- 注意：**eraherm-memory 是 MIT**，但上层完整产品（如 **HxSync**）仍保留 **[AGPL-3.0](https://github.com/yangwenhua212/hxsync/blob/main/LICENSE)** 保护。两者不冲突——底层模块要扩散，完整产品要守住。
 
 欢迎开 Issue / PR：先跑通「纠正后再召回」，再谈功能清单。

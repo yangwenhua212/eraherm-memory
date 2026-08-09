@@ -18,7 +18,8 @@
 | [0004](0004-ports-and-adapters.md) | 用 Port/Adapter 保证可替换后端 | Accepted |
 | [0006](0006-pluggable-backends.md) | 阶段 6 可插拔升级后端（Redis/Qdrant/Neo4j/异步） | Accepted |
 | [0007](0007-python-sdk.md) | 提供 Python HTTP SDK | Accepted |
-| [0008](0008-agpl-commercial-dual-license.md) | AGPL-3.0 与商业双许可 | Accepted |
+| [0008](0008-agpl-commercial-dual-license.md) | AGPL-3.0 与商业双许可 | Superseded |
+| [0009](0009-mit-license.md) | 许可改为 MIT（生态扩散） | Accepted |
 
 ## 何时必须写 ADR
 
