@@ -213,4 +213,4 @@ ERAHERM_CORRECT_CREATES_PINNED=true
 1. `pip install eraherm-memory`（或 editable path）。  
 2. 只依赖 `eraherm_memory.*`，不要 import `app.*`。  
 3. 契约测试：`memory_remember` → `memory_recall` → `memory_correct` → 再 `memory_recall`。  
-4. 第二个使用者（如另一位用户）上线时：再开一个 `HermesMemoryTools(..., user_id=...)` 隔离即可。
+4. 第二个使用者（如家人/同事）上线时：再开一个 `HermesMemoryTools(..., user_id=...)` 隔离即可。

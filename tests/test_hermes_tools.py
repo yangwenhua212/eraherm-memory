@@ -78,7 +78,7 @@ def test_dispatch_remember_recall_correct(tools: HermesMemoryTools) -> None:
     corrected = json.loads(
         tools.dispatch(
             "memory_correct",
-            {"correction": "用户喜欢喝冰美式不是热美式", "wrong_answer": "热美式"},
+            {"correction": "用户喜欢冰美式不是热美式", "wrong_answer": "热美式"},
         )
     )
     assert corrected["ok"] is True
