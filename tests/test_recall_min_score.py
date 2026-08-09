@@ -62,7 +62,7 @@ def _build(tmp_path: Path, *, min_score: float) -> MemoryService:
 def test_recall_min_score_filters_weak_hits(tmp_path: Path) -> None:
     svc = _build(tmp_path, min_score=0.25)
     svc.remember(
-        content="用户喜欢喝冰美式",
+        content="用户喜欢喝冰美式加冰块",
         user_id="u_ms",
         memory_type="fact",
         importance=1.0,
@@ -103,7 +103,7 @@ def test_recall_api_min_score_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     with TestClient(app) as client:
         client.post(
             "/v1/memories",
-            json={"user_id": "u_api", "content": "用户喜欢吃冰美式", "importance": 1.0},
+            json={"user_id": "u_api", "content": "用户喜欢喝冰美式加冰块", "importance": 1.0},
         )
         res = client.post(
             "/v1/recall",
