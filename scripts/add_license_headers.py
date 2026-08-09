@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-# Copyright (c) 2026 EraHerm-Memory Authors.
-# SPDX-License-Identifier: AGPL-3.0-only
-# Commercial licensing: see COMMERCIAL.md
+# Copyright (c) 2026 Wenhua Yang (杨文华)
+# SPDX-License-Identifier: MIT
 """Add SPDX copyright headers to project Python sources (idempotent)."""
 
 from __future__ import annotations
@@ -10,9 +9,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 HEADER_LINES = [
-    "# Copyright (c) 2026 EraHerm-Memory Authors.",
-    "# SPDX-License-Identifier: AGPL-3.0-only",
-    "# Commercial licensing: see COMMERCIAL.md",
+    "# Copyright (c) 2026 Wenhua Yang (杨文华)",
+    "# SPDX-License-Identifier: MIT",
 ]
 HEADER = "\n".join(HEADER_LINES) + "\n"
 
@@ -39,7 +37,7 @@ def main() -> None:
         if should_skip(path):
             continue
         text = path.read_text(encoding="utf-8")
-        if "SPDX-License-Identifier: AGPL-3.0-only" in text:
+        if "SPDX-License-Identifier: MIT" in text:
             continue
 
         if text.startswith("#!"):

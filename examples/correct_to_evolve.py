@@ -1,6 +1,5 @@
-# Copyright (c) 2026 EraHerm-Memory Authors.
-# SPDX-License-Identifier: AGPL-3.0-only
-# Commercial licensing: see COMMERCIAL.md
+# Copyright (c) 2026 Wenhua Yang (杨文华)
+# SPDX-License-Identifier: MIT
 
 """One-shot regression: 纠正即进化（给你自己用，不依赖外人）。
 
