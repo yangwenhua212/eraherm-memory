@@ -1,0 +1,7 @@
+name: eraherm
+version: 2.0.0
+description: "EraHerm-Memory — Hermes long-term memory layer. Auto-inject recall per turn, background sync, session-end consolidate, and built-in memory mirroring."
+hooks:
+  - on_session_end
+  - on_memory_write
+  - on_pre_compress
