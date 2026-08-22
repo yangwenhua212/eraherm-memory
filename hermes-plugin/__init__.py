@@ -1,4 +1,4 @@
-"""EraHerm-Memory provider — Hermes 长期记忆层（官方 MemoryProvider 实现）。
+"""EraHerm-Memory provider — Hermes 的长期记忆层（官方 MemoryProvider 实现）。
 
 Implements the full Hermes MemoryProvider ABC:
 
@@ -60,12 +60,14 @@ class EraHermMemoryProvider(MemoryProvider):
 
     def __init__(self) -> None:
         self._session_id: str = ""
+        self._user_id: str = _ERAHERM_USER
         self._prefetch_result: str = ""
         self._prefetch_lock = threading.Lock()
         self._prefetch_thread: Optional[threading.Thread] = None
         self._sync_thread: Optional[threading.Thread] = None
         self._consecutive_failures = 0
         self._breaker_open_until = 0.0
+        self._last_error = ""
 
     # -- Identity --------------------------------------------------------
 
@@ -366,6 +368,12 @@ class EraHermMemoryProvider(MemoryProvider):
             top_k = int(args.get("top_k", 5))
             min_score = float(args.get("min_score", _ERAHERM_MIN_SCORE))
             items = self._recall(q, top_k=top_k, min_score=min_score)
+            if not items and self._last_error:
+                return json.dumps({
+                    "ok": False,
+                    "error": f"EraHerm service unreachable: {self._last_error}",
+                    "hint": "EraHerm-Memory 服务不可用，记忆功能暂缺。服务恢复后自动重连。",
+                }, ensure_ascii=False)
             return json.dumps({"ok": True, "count": len(items), "items": items}, ensure_ascii=False)
         return json.dumps({"ok": False, "error": f"unknown tool {tool_name}"}, ensure_ascii=False)
 
@@ -467,8 +475,10 @@ class EraHermMemoryProvider(MemoryProvider):
             self._record_success()
         except Exception as e:
             self._record_failure()
+            self._last_error = str(e)
             logger.debug("eraherm recall failed: %s", e)
             return []
+        self._last_error = ""
         items = data.get("items", []) or []
         return [f"[{i.get('score', 0):.2f}] {i.get('content', '')}" for i in items]
 
