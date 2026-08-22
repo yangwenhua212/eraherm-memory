@@ -1,4 +1,4 @@
-"""EraHerm-Memory provider — Hermes 的长期记忆层（官方 MemoryProvider 实现）。
+"""EraHerm-Memory provider — Hermes 长期记忆层（官方 MemoryProvider 实现）。
 
 Implements the full Hermes MemoryProvider ABC:
 
@@ -14,7 +14,7 @@ No pip dependencies. Only requires the EraHerm service to be up.
 
 配置（.env）:
   ERAHERM_URL              服务地址，默认 http://127.0.0.1:8000
-  ERAHERM_MEMORY_USER      记忆归属 user_id，默认 hermes-user
+  ERAHERM_MEMORY_USER      记忆归属 user_id，默认 hermes-user（部署时按需配置）
   ERAHERM_MEMORY_TOP_K     预取条数，默认 6
   ERAHERM_MEMORY_MIN_SCORE 召回门禁，默认 0.25
   ERAHERM_ADMIN_TOKEN      整理压缩用 admin token（on_session_end 可选）
