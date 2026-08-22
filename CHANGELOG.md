@@ -5,6 +5,10 @@
 
 ## [Unreleased]
 
+### Added
+- `AgentMemory` 五能力封装：`learn()` / `remember()` / `reflect()` / `recall()` / `evolve()`（docs/HERMES_INTEGRATION.md §0）——面向 Host 的 Agent 能力化记忆 API，替代裸 HTTP 调用
+- 演示：`examples/agent_memory.py`（remember → learn → recall → evolve → reflect 全链路）
+
 ### Changed
 - 许可从 AGPL-3.0 + 商业双许可改为 **MIT**（[ADR 0009](docs/adr/0009-mit-license.md)）：底层内核要扩散生态，上层完整产品（HxSync）仍保留 AGPL-3.0。
 

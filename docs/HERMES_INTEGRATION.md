@@ -28,15 +28,21 @@ HxSync ──► Hermes Agent Core ──► EraHerm-Memory
 
 所以开发顺序：**① EraHerm-Memory 稳定 → ② Hermes 会用 Memory → ③ 接 Cursor/手机/Web 等工具端 → ④ HxSync 多设备同步**。
 
-**工具包装方向（Agent 能力化）：** 底层 `remember` / `recall` / `impact` / `consolidate` 不裸露，向 Host 暴露：
+**工具包装方向（Agent 能力化）：** 底层 `remember` / `recall` / `impact` / `consolidate` 不裸露，向 Host 暴露五能力封装 `AgentMemory`：
 
 ```python
-memory.learn()      # 从对话/反馈中沉淀
+from eraherm_memory import AgentMemory, MemoryClient
+
+memory = AgentMemory(MemoryClient("http://127.0.0.1:8000"), user_id="hermes:boss")
+
+memory.learn()      # 从对话/反馈中沉淀（启发式抽取事实）
 memory.remember()   # 显式写入事实
-memory.reflect()    # 整理 / 压缩 / 冲突处理
+memory.reflect()    # 整理 / 压缩 / 冲突处理（需 admin token）
 memory.recall()     # 语义召回
 memory.evolve()     # 纠正即进化（新事实压过旧版）
 ```
+
+演示：`python examples/agent_memory.py`（需先起服务 `uvicorn app.main:app --port 8000`）。
 
 **自我进化循环（Agent 经验系统）：** `任务 → 执行 → 失败 → 分析原因 → 写入 Memory → 下次自动规避`。例：第一次部署失败记录「缺环境变量」，第二次自动检查 `.env`。
 

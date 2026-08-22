@@ -190,6 +190,7 @@ memory.evolve()     # 纠正即进化（新事实压过旧版）
 |----|------|
 | `eraherm-reembed` 全量重嵌 | 已实现 |
 | `HermesMemoryTools` 内置 tool | 已实现 |
+| `AgentMemory` 五能力封装（learn/remember/reflect/recall/evolve） | 已实现 |
 | `fastembed` + `recall_min_score` | 已实现（见 CHANGELOG Unreleased / 待收 0.9.0） |
 
 ## 阶段 8+ 后续（有触发再做）
