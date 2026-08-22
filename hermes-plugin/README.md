@@ -79,12 +79,31 @@ Hermes Agent Core（调度者）
 ## 验证
 
 ```bash
-cd ~/.hermes/hermes-agent
-venv/bin/python -c "
-from plugins.memory import discover_memory_providers, load_memory_provider
-print([n for n,_,_ in discover_memory_providers()])   # 应含 eraherm
-p = load_memory_provider('eraherm'); print(p.is_available())
-"
+# 1. 插件发现与激活
+hermes memory status
+# → eraherm 在列表且 ← active
+
+# 2. 专属测试（15 用例：身份/断路器/工具/错误传播/prefetch/镜像/会话结束）
+#    放在 Hermes 仓库 tests/plugins/memory/test_eraherm_provider.py 后：
+python -m pytest tests/plugins/memory/test_eraherm_provider.py -q
+
+# 3. 官方 memory provider 回归（274 用例）
+python -m pytest tests/agent/test_memory_provider.py tests/run_agent/test_memory_provider_init.py tests/plugins/memory/ -q
+
+# 4. 运行时日志
+grep -i eraherm ~/.hermes/logs/agent.log | tail
 ```
 
-运行时日志：`grep -i eraherm ~/.hermes/logs/agent.log | tail`
+### 已实测通过（2026-08-22，生产环境）
+
+| 层面 | 结果 |
+|------|------|
+| 基础健康 | `hermes memory status` active；config `provider: eraherm`；服务 0.9.1 ok |
+| remember / recall | 写入 L2 pinned → 换词语义召回命中 0.54 |
+| evolve（纠正即进化） | 纠正 + 降权后 PostgreSQL(pinned 0.819) 压过旧 MySQL(0.690) |
+| prefetch | 每轮自动注入（日志 injected N items） |
+| sync_turn | 对话后自动沉淀，无需手动 remember |
+| on_memory_write | 内置记忆写入自动镜像（recall 0.64 命中） |
+| on_session_end | consolidate reports:1 |
+| 断路器 | 服务不可用：0.00s 返回、5 次失败后打开、打开后立即友好报错 |
+| 回归 | 官方 memory provider 测试 274 过 + 专属测试 15 过 |
