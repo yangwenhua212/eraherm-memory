@@ -6,6 +6,42 @@
 
 ---
 
+## 0. 定位：EraHerm-Memory = Hermes 的长期记忆层
+
+不是「Cursor 插件」，也不是 IDE 附属——它是 **Hermes 的长期记忆层**，类比：
+
+| 人 | AI |
+|----|-----|
+| 大脑皮层 | Hermes Agent（思考 / 规划 / 调度） |
+| 海马体 | EraHerm-Memory（长期记忆内核） |
+| 知识和经验 | 事实记忆 / 项目记忆 / 用户记忆 |
+
+```
+HxSync ──► Hermes Agent Core ──► EraHerm-Memory
+             调度者                    记忆内核
+```
+
+**为什么 Memory 先服务核心 Agent，而不是先接 Cursor：**
+
+- Cursor 是**一个工具接入端**，边界固定；
+- Hermes 是**通用 Agent 大脑**——需要调工具、规划任务、长期记忆、学习用户习惯、管理多个 Agent。
+
+所以开发顺序：**① EraHerm-Memory 稳定 → ② Hermes 会用 Memory → ③ 接 Cursor/手机/Web 等工具端 → ④ HxSync 多设备同步**。
+
+**工具包装方向（Agent 能力化）：** 底层 `remember` / `recall` / `impact` / `consolidate` 不裸露，向 Host 暴露：
+
+```python
+memory.learn()      # 从对话/反馈中沉淀
+memory.remember()   # 显式写入事实
+memory.reflect()    # 整理 / 压缩 / 冲突处理
+memory.recall()     # 语义召回
+memory.evolve()     # 纠正即进化（新事实压过旧版）
+```
+
+**自我进化循环（Agent 经验系统）：** `任务 → 执行 → 失败 → 分析原因 → 写入 Memory → 下次自动规避`。例：第一次部署失败记录「缺环境变量」，第二次自动检查 `.env`。
+
+---
+
 ## 1. 边界
 
 | 归属 | 职责 |
