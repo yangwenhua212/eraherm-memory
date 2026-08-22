@@ -1,4 +1,4 @@
-"""EraHerm-Memory provider — Hermes 的长期记忆层（官方 MemoryProvider 实现）。
+"""EraHerm-Memory provider — Hermes 长期记忆层（官方 MemoryProvider 实现）。
 
 Implements the full Hermes MemoryProvider ABC:
 
@@ -14,7 +14,7 @@ No pip dependencies. Only requires the EraHerm service to be up.
 
 配置（.env）:
   ERAHERM_URL              服务地址，默认 http://127.0.0.1:8000
-  ERAHERM_MEMORY_USER      记忆归属 user_id，默认 xiaoxian
+  ERAHERM_MEMORY_USER      记忆归属 user_id，默认 hermes-user（部署时按需配置）
   ERAHERM_MEMORY_TOP_K     预取条数，默认 6
   ERAHERM_MEMORY_MIN_SCORE 召回门禁，默认 0.25
   ERAHERM_ADMIN_TOKEN      整理压缩用 admin token（on_session_end 可选）
@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 # 默认配置 — .env 可覆盖
 _ERAHERM_URL = os.getenv("ERAHERM_URL", "http://127.0.0.1:8000")
-_ERAHERM_USER = os.getenv("ERAHERM_MEMORY_USER", "xiaoxian")
+_ERAHERM_USER = os.getenv("ERAHERM_MEMORY_USER", "hermes-user")
 _ERAHERM_TOP_K = int(os.getenv("ERAHERM_MEMORY_TOP_K", "6"))
 _ERAHERM_MIN_SCORE = float(os.getenv("ERAHERM_MEMORY_MIN_SCORE", "0.25"))
 _ERAHERM_ADMIN_TOKEN = os.getenv("ERAHERM_ADMIN_TOKEN", "")
@@ -87,7 +87,7 @@ class EraHermMemoryProvider(MemoryProvider):
     def initialize(self, session_id: str, **kwargs) -> None:
         self._session_id = session_id or ""
         # user_id 必须稳定（HERMES_INTEGRATION.md §3）：EraHerm 记忆挂在
-        # 固定 user_id 下（默认 xiaoxian），绝不随平台用户 id 变化——
+        # 固定 user_id 下（默认 hermes-user），绝不随平台用户 id 变化——
         # 换 user_id 永远召不回历史记忆。多用户隔离走身份层/多实例。
         self._user_id = _ERAHERM_USER
         logger.info(
@@ -432,7 +432,7 @@ class EraHermMemoryProvider(MemoryProvider):
     def get_config_schema(self) -> List[Dict[str, Any]]:
         return [
             {"key": "base_url", "description": "EraHerm-Memory service URL", "default": "http://127.0.0.1:8000", "env_var": "ERAHERM_URL"},
-            {"key": "user_id", "description": "Memory owner user_id", "default": "xiaoxian", "env_var": "ERAHERM_MEMORY_USER"},
+            {"key": "user_id", "description": "Memory owner user_id", "default": "hermes-user", "env_var": "ERAHERM_MEMORY_USER"},
             {"key": "top_k", "description": "Prefetch item count", "default": "6", "env_var": "ERAHERM_MEMORY_TOP_K"},
             {"key": "min_score", "description": "Recall minimum score", "default": "0.25", "env_var": "ERAHERM_MEMORY_MIN_SCORE"},
             {"key": "admin_token", "description": "Admin token for session-end consolidate (optional)", "secret": True, "env_var": "ERAHERM_ADMIN_TOKEN"},

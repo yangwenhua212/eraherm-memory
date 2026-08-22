@@ -22,7 +22,7 @@ hermes config set memory.provider eraherm
 
 ```env
 ERAHERM_URL=http://127.0.0.1:8000
-ERAHERM_MEMORY_USER=xiaoxian
+ERAHERM_MEMORY_USER=hermes-user
 ERAHERM_MEMORY_TOP_K=6
 ERAHERM_MEMORY_MIN_SCORE=0.25
 # 可选：会话结束自动整理压缩

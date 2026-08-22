@@ -21,6 +21,7 @@ htmlcov/
 # 本地运行文件（勿提交）
 _local_backup/
 identity_proxy.py
+activity_meinv.json
 activity_other.json
 run.sh
 watchdog.sh
