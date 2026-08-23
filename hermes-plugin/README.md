@@ -7,7 +7,7 @@ EraHerm-Memory 作为 **Hermes 的长期记忆层**（Memory Provider）接入 H
 
 ## 安装
 
-### 方式 A：用户级插件（自用/试用，最快）
+### 方式：用户级插件（自用/试用）
 
 ```bash
 mkdir -p ~/.hermes/plugins/eraherm
@@ -31,9 +31,7 @@ ERAHERM_ADMIN_TOKEN=your-admin-token
 
 重启 gateway / CLI 后生效。
 
-### 方式 B：随 Hermes 官方分发（提交 PR 后）
-
-目录 `plugins/memory/eraherm/`，随 hermes-agent 仓库发布，用户 `hermes memory setup eraherm` 引导配置。
+> 不向上游提交 PR：插件按用户级方式维护，随本仓库分发。
 
 ## 能力
 
@@ -84,7 +82,7 @@ hermes memory status
 # → eraherm 在列表且 ← active
 
 # 2. 专属测试（15 用例：身份/断路器/工具/错误传播/prefetch/镜像/会话结束）
-#    放在 Hermes 仓库 tests/plugins/memory/test_eraherm_provider.py 后：
+#    按 Hermes 仓库布局 plugins/memory/eraherm/ 放置后运行：
 python -m pytest tests/plugins/memory/test_eraherm_provider.py -q
 
 # 3. 官方 memory provider 回归（274 用例）
