@@ -29,6 +29,12 @@ def test_correction_replaces_wrong_in_related_memory() -> None:
     assert out == "数据库使用 PostgreSQL"
 
 
+def test_correction_case_insensitive_replace() -> None:
+    # 用户纠正写小写 fastmcp，记忆里存大写 MCP → 大小写不敏感替换
+    out = _normalize_correction("应该是 fastmcp 不是 mcp", ["项目 Cursor 适配器用 MCP stdio 连接"])
+    assert out == "项目 Cursor 适配器用 fastmcp stdio 连接"
+
+
 def test_correction_fallback_without_related_keeps_correct_first() -> None:
     out = _normalize_correction("应该是 PostgreSQL 不是 MySQL")
     assert "PostgreSQL" in out

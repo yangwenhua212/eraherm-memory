@@ -110,7 +110,7 @@ def create_mcp():
             """Graph impact: who is affected if entity changes (inbound) or what it depends on (outbound)."""
             return json.dumps(
                 _post(
-                    "/graph/impact",
+                    "/v1/graph/impact",
                     {
                         "entity_name": entity_name,
                         "user_id": user_id,
@@ -125,7 +125,7 @@ def create_mcp():
         def consolidate(user_id: str | None = None) -> str:
             """Run memory consolidation (reweight / compress / conflict forget) for one user or all."""
             return json.dumps(
-                _post("/admin/consolidate", {"user_id": user_id}),
+                _post("/v1/admin/consolidate", {"user_id": user_id}),
                 ensure_ascii=False,
             )
 
