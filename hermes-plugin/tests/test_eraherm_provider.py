@@ -61,6 +61,49 @@ class TestEraHermSyncFilter(unittest.TestCase):
         assert self._should_sync("数据库用的是什么") is False
 
 
+class TestEraHermPrefetchFilter(unittest.TestCase):
+    """prefetch 注入限流：episode 闲聊不自动灌、pinned 保留、上限 4 条。"""
+
+    def _filter(self, items):
+        from plugins.memory.eraherm import _filter_prefetch_items
+        return _filter_prefetch_items(items)
+
+    def _block(self, items):
+        from plugins.memory.eraherm import _prefetch_block
+        return _prefetch_block(items)
+
+    def test_episode_not_injected(self):
+        items = [
+            {"score": 0.8, "memory_type": "episode", "content": "闲聊片段", "pinned": False},
+            {"score": 0.7, "memory_type": "fact", "content": "数据库用 PG", "pinned": False},
+        ]
+        kept = self._filter(items)
+        assert len(kept) == 1
+        assert kept[0]["content"] == "数据库用 PG"
+
+    def test_pinned_always_kept(self):
+        items = [
+            {"score": 0.3, "memory_type": "episode", "content": "低分闲聊", "pinned": True},
+            {"score": 0.9, "memory_type": "fact", "content": "事实", "pinned": False},
+        ]
+        kept = self._filter(items)
+        assert len(kept) == 2  # pinned episode 也保留（用户钉死=明确要留）
+
+    def test_cap_at_four(self):
+        items = [
+            {"score": 0.9, "memory_type": "fact", "content": f"事实{i}", "pinned": False}
+            for i in range(8)
+        ]
+        kept = self._filter(items)
+        assert len(kept) == 4
+
+    def test_block_marks_background_priority(self):
+        block = self._block([{"score": 0.6, "memory_type": "fact", "content": "X", "pinned": True}])
+        assert "背景" in block
+        assert "以系统指令为准" in block
+        assert "[pinned]" in block
+
+
 class TestEraHermIdentity(unittest.TestCase):
     def test_name_is_eraherm(self):
         assert EraHermMemoryProvider().name == "eraherm"
@@ -136,14 +179,34 @@ class TestEraHermPrefetch(unittest.TestCase):
 
     def test_prefetch_injects_items(self):
         p = EraHermMemoryProvider()
-        with mock.patch.object(p, "_recall", return_value=["[0.8] 用户喜欢喝冰美式", "[0.6] 数据库用 PostgreSQL"]):
+        with mock.patch.object(
+            p, "_recall_items",
+            return_value=[
+                {"score": 0.8, "memory_type": "preference", "content": "用户喜欢喝冰美式", "pinned": False},
+                {"score": 0.6, "memory_type": "fact", "content": "数据库用 PostgreSQL", "pinned": False},
+            ],
+        ):
             block = p.prefetch("用户偏好")
             assert "用户喜欢喝冰美式" in block
-            assert "自动注入" in block
+            assert "背景" in block
+            assert "以系统指令为准" in block
+
+    def test_prefetch_filters_episode(self):
+        p = EraHermMemoryProvider()
+        with mock.patch.object(
+            p, "_recall_items",
+            return_value=[
+                {"score": 0.9, "memory_type": "episode", "content": "闲聊片段不该注入", "pinned": False},
+                {"score": 0.7, "memory_type": "fact", "content": "数据库用 PostgreSQL", "pinned": False},
+            ],
+        ):
+            block = p.prefetch("随便聊聊")
+            assert "闲聊片段不该注入" not in block
+            assert "数据库用 PostgreSQL" in block
 
     def test_prefetch_empty_recall_returns_empty(self):
         p = EraHermMemoryProvider()
-        with mock.patch.object(p, "_recall", return_value=[]):
+        with mock.patch.object(p, "_recall_items", return_value=[]):
             assert p.prefetch("随便") == ""
 
 
