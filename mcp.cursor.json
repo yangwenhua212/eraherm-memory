@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "eraherm": {
+      "command": "python",
+      "args": ["eraherm_mcp_server.py"],
+      "cwd": "D:/path/to/eraherm-memory",
+      "env": {
+        "ERAHERM_API_URL": "http://127.0.0.1:8000",
+        "ERAHERM_USER_ID": "cursor:laoda"
+      }
+    }
+  }
+}

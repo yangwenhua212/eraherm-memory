@@ -20,11 +20,13 @@ def _normalize_correction(text: str, related_contents: Sequence[str] | None = No
         wrong = m.group(2).strip(" ，,。")
         # 优先在关联记忆里做 wrong→correct 替换，生成干净完整的事实句
         # （避免「正确事实：X（此前误为 Y）」模板拉低嵌入语义分）
+        # 大小写不敏感：用户纠正可能写「fastmcp」，记忆里存「MCP」
         if wrong and correct:
             for rc in related_contents:
                 rc = rc.strip()
-                if wrong in rc:
-                    replaced = rc.replace(wrong, correct)
+                idx = rc.lower().find(wrong.lower())
+                if idx >= 0:
+                    replaced = rc[:idx] + correct + rc[idx + len(wrong):]
                     if replaced != rc:
                         return replaced
         return f"{correct}（此前误为 {wrong}）"

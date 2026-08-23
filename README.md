@@ -118,6 +118,47 @@ ERAHERM_RECALL_MIN_SCORE=0.25
 
 ---
 
+## Cursor 适配器（独立 stdio，不经 Hermes）
+
+想让 Cursor 直接读写 EraHerm 记忆、不经过 Hermes？用独立的 [`eraherm_mcp_server.py`](eraherm_mcp_server.py)：
+
+- **零依赖**：不加载 embedding 模型、不起本地容器，纯 HTTP 转发到 `ERAHERM_API_URL`（模型在服务端）
+- **工具带 `eraherm_` 前缀**，避免与 Cursor 里其它 MCP 冲突
+- 工具：`eraherm_remember` / `eraherm_recall` / `eraherm_evolve`（纠正即进化）/ `eraherm_impact` / `eraherm_consolidate` / `eraherm_health`
+
+在 Cursor 的 `mcp.json` 里加（参考 [`mcp.cursor.json`](mcp.cursor.json)）：
+
+```json
+{
+  "mcpServers": {
+    "eraherm": {
+      "command": "python",
+      "args": ["eraherm_mcp_server.py"],
+      "cwd": "D:/path/to/eraherm-memory",
+      "env": {
+        "ERAHERM_API_URL": "http://127.0.0.1:8000",
+        "ERAHERM_USER_ID": "cursor:laoda"
+      }
+    }
+  }
+}
+```
+
+然后直接自然语言触发：
+
+| 你说 | 背后调用 |
+|------|----------|
+| 「记住：项目部署在 OVH」 | `eraherm_remember` |
+| 「我之前记过这个项目的什么？」 | `eraherm_recall` |
+| 「不对，应该是 X 不是 Y」 | `eraherm_evolve`（纠正即进化） |
+| 「改 MCP 配置会影响谁？」 | `eraherm_impact` |
+
+自验脚本（需服务在跑）：`python examples/cursor_mcp_check.py`。
+
+> `eraherm_consolidate` 需要管理员权限：配 `ERAHERM_ADMIN_TOKEN` 环境变量。
+
+---
+
 ## 三大支柱（只做这三件事）
 
 | 支柱 | 解决什么 |
