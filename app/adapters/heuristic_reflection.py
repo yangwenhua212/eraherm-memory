@@ -10,15 +10,25 @@ from app.models import MemoryType
 from app.ports.reflection import ReflectionDraft
 
 
-def _normalize_correction(text: str) -> str:
+def _normalize_correction(text: str, related_contents: Sequence[str] | None = None) -> str:
     t = text.strip()
+    related_contents = list(related_contents or [])
     # "应该是 X 不是 Y" / "是 X 不是 Y"
     m = re.search(r"(?:应该是|应为|改成|纠正为|是)\s*(.+?)\s*(?:不是|而非|而不是)\s*(.+)$", t)
     if m:
         correct = m.group(1).strip(" ，,。")
         wrong = m.group(2).strip(" ，,。")
-        return f"正确事实：{correct}（此前误为 {wrong}）"
-    if t and not t.endswith(("。", ".", "！", "!")):
+        # 优先在关联记忆里做 wrong→correct 替换，生成干净完整的事实句
+        # （避免「正确事实：X（此前误为 Y）」模板拉低嵌入语义分）
+        if wrong and correct:
+            for rc in related_contents:
+                rc = rc.strip()
+                if wrong in rc:
+                    replaced = rc.replace(wrong, correct)
+                    if replaced != rc:
+                        return replaced
+        return f"{correct}（此前误为 {wrong}）"
+    if t and not t.endswith(("。", ".", "！", "!", "？", "?")):
         t = t + "。"
     return t
 
@@ -61,7 +71,7 @@ class HeuristicReflectionPipeline:
                 confidence=0.2,
                 memory_type=MemoryType.REFLECTION.value,
             )
-        summary = _normalize_correction(text)
+        summary = _normalize_correction(text, related_contents)
         analysis_parts = [
             "用户提供了显式纠正。",
             f"纠正原文：{text}",
