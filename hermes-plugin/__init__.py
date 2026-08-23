@@ -54,6 +54,25 @@ _FACT_HINTS = re.compile(
 )
 _IDENTITY_HINTS = re.compile(r"(我叫|用户名|我的名字|称呼我|是.{0,6}(开发|工程师|学生))", re.I)
 
+# 防假阳性：长文（讨论/粘贴/评价）与问句（提问不是事实）不自动沉淀。
+# 2026-08-23 线上事故：1206 字评价长文因含「我的名字叫啥」测试词被钉成 identity。
+_SYNC_MAX_CHARS = 300
+_QUESTION_TAILS = ("？", "?", "吗", "呢", "什么", "啥", "怎么", "如何", "为啥", "为什么")
+
+
+def _is_question(text: str) -> bool:
+    t = text.rstrip()
+    return any(t.endswith(q) for q in _QUESTION_TAILS)
+
+
+def _should_sync(text: str) -> bool:
+    """启发式过滤：长度 6..300、非问句、含事实/身份信号才沉淀。"""
+    if not text or len(text) < 6 or len(text) > _SYNC_MAX_CHARS:
+        return False
+    if _is_question(text):
+        return False
+    return bool(_FACT_HINTS.search(text) or _IDENTITY_HINTS.search(text))
+
 
 class EraHermMemoryProvider(MemoryProvider):
     """Full-lifecycle EraHerm provider: prefetch + sync + session-end consolidate."""
@@ -208,7 +227,7 @@ class EraHermMemoryProvider(MemoryProvider):
         if self._is_breaker_open():
             return
         text = (user_content or "").strip()
-        if len(text) < 6 or not (_FACT_HINTS.search(text) or _IDENTITY_HINTS.search(text)):
+        if not _should_sync(text):
             return
 
         def _run() -> None:
@@ -295,7 +314,7 @@ class EraHermMemoryProvider(MemoryProvider):
             if m.get("role") != "user":
                 continue
             text = str(m.get("content", "") or "").strip()
-            if len(text) >= 6 and (_FACT_HINTS.search(text) or _IDENTITY_HINTS.search(text)):
+            if _should_sync(text):
                 candidates.append(text)
         if not candidates:
             return ""

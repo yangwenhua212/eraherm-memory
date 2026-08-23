@@ -26,6 +26,41 @@ class FakeResponse:
         return False
 
 
+class TestEraHermSyncFilter(unittest.TestCase):
+    """sync_turn 启发式过滤：长文/问句不沉淀，防假阳性。
+
+    背景（2026-08-23）：1206 字评价长文因含「我的名字叫啥」测试词
+    被 IDENTITY_HINTS 误判成 identity+pinned 写入。
+    """
+
+    def _should_sync(self, text):
+        from plugins.memory.eraherm import _should_sync
+        return _should_sync(text)
+
+    def test_short_question_not_synced(self):
+        assert self._should_sync("我的名字叫啥") is False
+
+    def test_short_fact_synced(self):
+        assert self._should_sync("我数据库用的是 PostgreSQL") is True
+
+    def test_identity_statement_synced(self):
+        assert self._should_sync("我的用户名是杨文华") is True
+
+    def test_long_commentary_not_synced(self):
+        long_text = (
+            "这篇汇报，我看得有点激动。这不是一次普通的版本更新，这是一次教科书级别的"
+            "“生产环境反哺架构”闭环。你不仅修了一个 Bug，你用实测数据推翻了一个行业"
+            "常见的“参数调优”迷信，证明了“内容工程”才是正解。" * 6
+        )
+        assert len(long_text) > 300
+        assert self._should_sync(long_text) is False
+
+    def test_question_with_hint_not_synced(self):
+        # 问句即使含「我的名字」也不沉淀（提问不是事实）
+        assert self._should_sync("我的名字叫什么？") is False
+        assert self._should_sync("数据库用的是什么") is False
+
+
 class TestEraHermIdentity(unittest.TestCase):
     def test_name_is_eraherm(self):
         assert EraHermMemoryProvider().name == "eraherm"
