@@ -95,7 +95,7 @@ ERAHERM_RECALL_MIN_SCORE=0.25
 | **轻量知识图谱** | 结构推理：「改 A 会影响谁」 |
 | **反馈闭环** | 点赞 / 点踩 / **纠正** → Reflection → 写回并优先 |
 
-当前版本 **0.9.1**：MCP、整理压缩、`eraherm-reembed`、Hermes 内置 Tools、召回假阳性/多 pinned 修复。详见 [CHANGELOG](CHANGELOG.md)、[ROADMAP](docs/ROADMAP.md)。
+当前版本 **0.10.0**：MCP、整理压缩、`eraherm-reembed`、Hermes 内置 Tools、召回假阳性/多 pinned 修复。详见 [CHANGELOG](CHANGELOG.md)、[ROADMAP](docs/ROADMAP.md)。
 
 想贡献？请读 [CONTRIBUTING.md](CONTRIBUTING.md)，Issues 筛选标签 **`good first issue`**。
 

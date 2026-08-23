@@ -3,14 +3,23 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)（`0.x` 允许破坏性变更，见 [API 规范](docs/specs/API.md)）。
 
-## [Unreleased]
+## [0.10.0] - 2026-08-23
 
 ### Added
 - `AgentMemory` 五能力封装：`learn()` / `remember()` / `reflect()` / `recall()` / `evolve()`（docs/HERMES_INTEGRATION.md §0）——面向 Host 的 Agent 能力化记忆 API，替代裸 HTTP 调用
 - 演示：`examples/agent_memory.py`（remember → learn → recall → evolve → reflect 全链路）
+- 回归测试：`tests/test_correct_evolve_regression.py`（纠正即进化：干净事实模板 + 无关不硬拉 pinned）
 
 ### Changed
 - 许可从 AGPL-3.0 + 商业双许可改为 **MIT**（[ADR 0009](docs/adr/0009-mit-license.md)）：底层内核要扩散生态，上层完整产品（HxSync）仍保留 AGPL-3.0。
+- 纠正反射 `_normalize_correction`：改为在关联记忆里做 wrong→correct 替换生成**干净事实句**（如「数据库使用 PostgreSQL」），不再用「正确事实：X（此前误为 Y）」模板——该模板拉低嵌入语义分，导致纠正后新事实被 recall 门禁挡掉（线上冒烟 FAIL）
+- hermes-plugin：放弃上游 PR 路线，按用户级插件维护（README 更新）
+
+### Fixed
+- 纠正即进化回归：纠正后新事实无法排第一（嵌入分被模板拉低 0.244 + 零词法被 `min_score_no_lexical` 挡）。修复后新事实稳定第一（实测 0.619 [pinned] 压过旧事实）
+- 上线检查表验收：补写 xiaoxian 身份记忆（含「用户名/名字」问法关键词，词法重叠生效）；清理 2 条无 user_id 孤儿测试残留
+
+[0.10.0]: https://github.com/yangwenhua212/eraherm-memory/releases/tag/v0.10.0
 
 ## [0.9.1] - 2026-07-31
 
