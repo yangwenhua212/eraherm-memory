@@ -49,10 +49,14 @@ def create_mcp():
         import urllib.request
 
         def _post(path: str, payload: dict[str, Any]) -> dict[str, Any]:
+            headers = {"Content-Type": "application/json"}
+            admin_token = os.getenv("ERAHERM_ADMIN_TOKEN")
+            if admin_token:
+                headers["X-Admin-Token"] = admin_token
             req = urllib.request.Request(
                 f"{_HTTP_BASE}{path}",
                 data=json.dumps(payload).encode("utf-8"),
-                headers={"Content-Type": "application/json"},
+                headers=headers,
                 method="POST",
             )
             with urllib.request.urlopen(req, timeout=10) as resp:

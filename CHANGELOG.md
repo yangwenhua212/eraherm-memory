@@ -3,6 +3,12 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)（`0.x` 允许破坏性变更，见 [API 规范](docs/specs/API.md)）。
 
+## [Unreleased]
+
+### Fixed
+- MCP 转发 admin 端点 401：`app/mcp_server.py` 的 `_post` 不带 `X-Admin-Token` 头、`eraherm_mcp_server.py` 误用 `Authorization: Bearer`（后端只认 `X-Admin-Token`）——consolidate / reembed / l3 经 MCP 全部 401。统一改为 `X-Admin-Token`（值取 `ERAHERM_ADMIN_TOKEN`），新增回归测试 `test_mcp_admin_auth_header_is_x_admin_token`
+- 文档同步：`docs/specs/API.md` 补 consolidate curl 示例（含 `X-Admin-Token`），`docs/MCP.md` 标注 consolidate 需服务端配置 `ERAHERM_ADMIN_TOKEN`
+
 ## [0.10.0] - 2026-08-23
 
 ### Added
