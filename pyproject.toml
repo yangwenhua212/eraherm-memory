@@ -1,6 +1,6 @@
 [project]
 name = "eraherm-memory"
-version = "0.10.0"
+version = "0.10.1"
 description = "EraHerm-Memory — embeddable Agent memory kernel"
 readme = "README.md"
 license = "MIT"
