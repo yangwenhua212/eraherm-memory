@@ -110,7 +110,24 @@ def test_compress_three_db_memories(tmp_path: Path):
     assert report.compressed_clusters >= 1
     assert report.compressed_deleted >= 3
     rows = memory.repo.list_active_by_user("u8b")
-    assert any("精华摘要" in r.content for r in rows)
+    # 摘要必须是干净事实句，不带 `【精华摘要·X】` 模板前缀（语义噪声会拉高弱相关）
+    assert any(r.content for r in rows if "数据库" in r.content)
+    assert not any("精华摘要" in r.content for r in rows)
+
+
+def test_summarizer_no_template_prefix(tmp_path: Path):
+    """摘要不允许出现 `【精华摘要·X】` 模板前缀。
+
+    背景：2026-08-25 实测该前缀在语义空间是纯噪声——
+    弱相关查询「服务器配置」0.501 命中带前缀摘要，探针 FAIL。
+    """
+    from app.consolidate.service import HeuristicSummarizer
+
+    s = HeuristicSummarizer().summarize(
+        ["数据库连接池大小设为 20", "数据库超时时间 3 秒"], topic_hint="database"
+    )
+    assert "精华摘要" not in s
+    assert "数据库" in s
 
 
 def test_recall_increments_access_count(tmp_path: Path):
