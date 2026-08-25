@@ -68,9 +68,10 @@ class HeuristicSummarizer:
             uniq.append(c.strip())
             if len(uniq) >= 4:
                 break
-        topic = topic_hint or "相关主题"
         joined = "；".join(uniq)
-        return f"【精华摘要·{topic}】{joined}"
+        # 不拼模板前缀：`【精华摘要·X】` 在语义空间是纯噪声，会把弱相关查询拉高
+        # （2026-08-25 实测「服务器配置」0.501 命中摘要，弱相关探针 FAIL）
+        return joined
 
 
 class LLMSummarizer:
@@ -89,7 +90,8 @@ class LLMSummarizer:
         summary = str(data.get("summary") or "").strip()
         if not summary:
             return HeuristicSummarizer().summarize(contents, topic_hint=topic_hint)
-        return f"【精华摘要·{topic_hint or '相关主题'}】{summary}"
+        # 同样不拼模板前缀（噪声，见 HeuristicSummarizer）
+        return summary
 
 
 class ConsolidationService:
