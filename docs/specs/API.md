@@ -273,7 +273,14 @@ Remember：写入一条内容（先进 L1；符合策略则写 L2）。
 
 ### `POST /v1/admin/consolidate`
 
-触发记忆整理（重排 / 压缩 / 冲突淘汰 / 低权重遗忘）。需 `X-Admin-Token`。
+触发记忆整理（重排 / 压缩 / 冲突淘汰 / 低权重遗忘）。需 `X-Admin-Token` 头（值 = `ERAHERM_ADMIN_TOKEN`）。
+
+```bash
+curl -X POST http://127.0.0.1:8000/v1/admin/consolidate \
+  -H "Content-Type: application/json" \
+  -H "X-Admin-Token: $ERAHERM_ADMIN_TOKEN" \
+  -d '{"user_id": "u_123"}'
+```
 
 ```json
 { "user_id": "u_123" }

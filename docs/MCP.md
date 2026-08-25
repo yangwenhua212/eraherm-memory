@@ -9,7 +9,7 @@
 | `remember` | 写入记忆（含 `alerts`） |
 | `recall` | 语义召回 + `recommendations` |
 | `impact` | 图谱影响面 |
-| `consolidate` | 手动触发记忆整理 |
+| `consolidate` | 手动触发记忆整理（服务端需配 `ERAHERM_ADMIN_TOKEN`） |
 | `health` | 健康检查 |
 
 ## 安装

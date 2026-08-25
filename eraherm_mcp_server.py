@@ -40,7 +40,7 @@ _ADMIN_TOKEN = os.getenv("ERAHERM_ADMIN_TOKEN", "")
 def _headers() -> dict[str, str]:
     h = {"Content-Type": "application/json"}
     if _ADMIN_TOKEN:
-        h["Authorization"] = f"Bearer {_ADMIN_TOKEN}"
+        h["X-Admin-Token"] = _ADMIN_TOKEN
     return h
 
 
