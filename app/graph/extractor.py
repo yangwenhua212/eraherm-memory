@@ -67,14 +67,58 @@ def infer_entity_type(name: str) -> str:
     return "other"
 
 
+# 口语虚词/连接词——主语或宾语命中即丢弃（不构成实体）
+_STOPWORDS = {
+    "不", "就", "也", "还", "又", "都", "才", "再", "只", "很", "太", "更",
+    "然后", "接着", "所以", "因为", "但是", "不过", "而且", "其实", "就是",
+    "以及", "或者", "这个", "那个", "这样", "那样", "怎么", "什么", "为什么",
+    "是否", "可能", "应该", "可以", "需要", "没有", "不是", "还是", "方式",
+    "方法", "时候", "地方", "东西", "事情", "问题", "感觉", "知道", "觉得",
+}
+
+# 宾语里的否定残留前缀（「不是 X」「不用 X」→ X 是正主语，丢弃残留）
+_NEGATION_PREFIX = re.compile(r"^(?:不是|不用|不要|没有|非|并非|并非不是|不等于|而不是)", re.I)
+
+# 单字实体仅允许白名单（技术栈/人名等强信号，宁可少抽不可抽错）
+_SINGLE_CHAR_ALLOW = {"云", "网"}
+
+
+def _is_valid_entity(name: str) -> bool:
+    n = name.strip()
+    if not n:
+        return False
+    # 长度门槛：1 字除非白名单
+    if len(n) == 1 and n not in _SINGLE_CHAR_ALLOW:
+        return False
+    # 纯标点/符号
+    if re.fullmatch(r"[\W_]+", n, flags=re.UNICODE):
+        return False
+    # 停用词（含否定残留词本身）
+    if n.lower() in _STOPWORDS:
+        return False
+    # 含停用词的整句碎片（如「把两个完全不同的东西混在一起说了」）
+    if any(w in n for w in ("的", "了", "把", "在", "混在一起", "来回跳")):
+        return False
+    return True
+
+
+def _clean_object(obj: str) -> str | None:
+    """清理宾语：去否定残留前缀与尾部虚词，不合格返回 None。"""
+    o = obj.strip().strip("的").strip()
+    o = re.sub(r"^(了|到|着)", "", o)
+    o = _NEGATION_PREFIX.sub("", o).strip()
+    if not _is_valid_entity(o):
+        return None
+    return o
+
+
 def _split_objects(obj_blob: str) -> list[str]:
     parts = re.split(r"[、,，/]|和|与|及|以及|and", obj_blob)
     cleaned: list[str] = []
     for p in parts:
-        p = p.strip().strip("的").strip()
-        p = re.sub(r"^(了|到|着)", "", p)
-        if len(p) >= 1:
-            cleaned.append(p)
+        c = _clean_object(p)
+        if c:
+            cleaned.append(c)
     return cleaned
 
 
@@ -92,7 +136,7 @@ class RuleGraphExtractor:
             for match in pattern.finditer(text):
                 sub = match.group("sub").strip()
                 objs = _split_objects(match.group("obj"))
-                if not sub or not objs:
+                if not _is_valid_entity(sub) or not objs:
                     continue
                 sub_type = infer_entity_type(sub)
                 entities[sub.lower()] = ExtractedEntity(name=sub, entity_type=sub_type)
