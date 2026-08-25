@@ -11,6 +11,7 @@ _KNOWN_DIMS: dict[str, int] = {
     "BAAI/bge-small-zh-v1.5": 512,
     "BAAI/bge-small-en-v1.5": 384,
     "BAAI/bge-base-en-v1.5": 768,
+    "BAAI/bge-m3": 1024,
     "sentence-transformers/all-MiniLM-L6-v2": 384,
     "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2": 384,
     "intfloat/multilingual-e5-large": 1024,

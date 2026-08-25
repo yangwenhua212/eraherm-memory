@@ -192,6 +192,7 @@ memory.evolve()     # 纠正即进化（新事实压过旧版）
 | `HermesMemoryTools` 内置 tool | 已实现 |
 | `AgentMemory` 五能力封装（learn/remember/reflect/recall/evolve） | 已实现 |
 | `fastembed` + `recall_min_score` | 已实现（见 CHANGELOG Unreleased / 待收 0.9.0） |
+| **主动感知看门狗（phase 9）** | 已实现：`POST /v1/admin/watchdog` 巡检（倒计时/被遗忘宝石/健康信号），零 LLM；敏感记忆（秘密/红线）绝不推送；Host 侧 cron 每 6h 巡检、有料才推飞书（`~/.hermes/scripts/eraherm-watchdog.sh`） |
 
 ## 阶段 8+ 后续（有触发再做）
 

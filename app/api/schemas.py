@@ -254,6 +254,26 @@ class ConsolidateResponse(BaseModel):
     reports: list[ConsolidateUserReport]
 
 
+class WatchdogItemOut(BaseModel):
+    kind: str
+    title: str
+    detail: str
+    severity: str = "info"
+    related: list[str] = Field(default_factory=list)
+
+
+class WatchdogRequest(BaseModel):
+    user_id: str = Field(default="", description="要巡检的用户；省略则全量巡检所有活跃用户")
+    today: Optional[str] = Field(
+        default=None, description="YYYY-MM-DD，测试/调试用；默认今天"
+    )
+
+
+class WatchdogResponse(BaseModel):
+    items: list[WatchdogItemOut]
+    users: list[str] = Field(default_factory=list)
+
+
 class ReembedRequest(BaseModel):
     user_id: Optional[str] = None
     orphan_policy: str = Field(default="assign", pattern="^(assign|skip|fail)$")

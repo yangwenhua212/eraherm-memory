@@ -27,6 +27,7 @@ from app.ports.session_cache import SessionCache
 from app.ports.vector_store import VectorStore
 from app.proactive.service import ProactiveService
 from app.consolidate.service import ConsolidationService, HeuristicSummarizer, LLMSummarizer
+from app.watchdog.service import WatchdogService
 
 
 @dataclass
@@ -38,6 +39,7 @@ class Container:
     l3_service: L3ArchiveService
     proactive_service: ProactiveService | None = None
     consolidation_service: ConsolidationService | None = None
+    watchdog_service: WatchdogService | None = None
     job_queue: InMemoryJobQueue | None = None
     scheduler: object | None = None
 
@@ -234,6 +236,8 @@ def build_container(settings: Settings | None = None) -> Container:
         summarizer=summarizer,
     )
 
+    watchdog_service = WatchdogService(repo=repo, settings=settings)
+
     scheduler = None
     if settings.consolidation_enabled:
         from app.consolidate.scheduler import start_consolidation_scheduler
@@ -248,6 +252,7 @@ def build_container(settings: Settings | None = None) -> Container:
         l3_service=l3_service,
         proactive_service=proactive,
         consolidation_service=consolidation_service,
+        watchdog_service=watchdog_service,
         job_queue=job_queue,
         scheduler=scheduler,
     )

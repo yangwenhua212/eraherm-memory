@@ -288,6 +288,42 @@ curl -X POST http://127.0.0.1:8000/v1/admin/consolidate \
 
 `user_id` 省略则对所有用户执行。
 
+### `POST /v1/admin/watchdog`
+
+主动感知看门狗巡检：扫描记忆库，产出「值得说的事」（倒计时事件 / 被遗忘的高价值记忆 / 记忆健康信号）。**零 LLM / 零外部 API**（SQLite + 正则 + 标准库）。需 `X-Admin-Token` 头。
+
+```bash
+curl -X POST http://127.0.0.1:8000/v1/admin/watchdog \
+  -H "Content-Type: application/json" \
+  -H "X-Admin-Token: $ERAHERM_ADMIN_TOKEN" \
+  -d '{"user_id": "u_123"}'
+```
+
+```json
+{ "user_id": "u_123" }
+```
+
+`user_id` 省略则巡检所有活跃用户。响应：
+
+```json
+{
+  "items": [
+    {
+      "kind": "countdown",
+      "title": "⏰ 一周后：2026-12-19",
+      "detail": "考研初试 2026-12-19 考试，22408 方向",
+      "severity": "normal",
+      "related": ["mem_xxx"]
+    }
+  ],
+  "users": ["u_123"]
+}
+```
+
+- `items` 为空 = 无事发生，Host（cron 脚本）应静默不打扰
+- 敏感记忆（含 秘密/红线/绝对不提 等词）**绝不进入 items**——主动推送 = 泄露，按此设计
+- 信号类型：`countdown`（D-7/D-3/D-1/当天）、`forgotten_gems`（importance≥0.8 且从未被 recall）、`health`（低权重堆积）
+
 ### `POST /v1/admin/l3/dump`
 
 触发 L3 归档；需管理令牌。

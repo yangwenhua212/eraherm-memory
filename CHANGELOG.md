@@ -3,6 +3,11 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)（`0.x` 允许破坏性变更，见 [API 规范](docs/specs/API.md)）。
 
+## [Unreleased]
+
+### Added
+- 主动感知看门狗（phase 9）：`POST /v1/admin/watchdog` 巡检记忆库，产出「值得说的事」——倒计时事件（D-7/D-3/D-1/当天）、被遗忘的高价值记忆（importance≥0.8 且从未被 recall）、健康信号。**零 LLM / 零外部 API**（SQLite + 正则 + 标准库）。敏感记忆（秘密/红线类）绝不进入推送。回归测试 `tests/test_watchdog.py`（5 例）
+
 ## [0.10.1] - 2026-08-25
 
 ### Fixed
