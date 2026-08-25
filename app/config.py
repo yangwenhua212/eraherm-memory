@@ -101,6 +101,12 @@ class Settings(BaseSettings):
     consolidation_max_clusters: int = 20
     consolidation_use_llm: bool = False  # heuristic summary by default
 
+    # phase 9 watchdog (主动感知看门狗 — 零 LLM / 零外部 API)
+    watchdog_scan_limit: int = 200  # 巡检的记忆条数上限
+    watchdog_gem_importance: float = 0.8  # 「从未被用过高价值记忆」的 importance 门槛
+    watchdog_max_gems: int = 3
+    watchdog_low_weight: float = 0.12  # 低于此 weight 视为待遗忘
+
     def ensure_dirs(self) -> None:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         (self.data_dir / "l3").mkdir(parents=True, exist_ok=True)

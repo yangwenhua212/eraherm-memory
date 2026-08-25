@@ -43,6 +43,9 @@ from app.api.schemas import (
     RememberRequest,
     RememberResponse,
     SessionResponse,
+    WatchdogItemOut,
+    WatchdogRequest,
+    WatchdogResponse,
 )
 from app.archive.service import L3ArchiveService
 from app.consolidate.service import ConsolidationService
@@ -50,6 +53,7 @@ from app.feedback.service import FeedbackService
 from app.graph.service import GraphService
 from app.memory.service import MemoryService
 from app.observability.metrics import METRICS
+from app.watchdog.service import WatchdogService
 
 router = APIRouter(prefix="/v1")
 
@@ -466,6 +470,48 @@ def admin_consolidate(
             for r in reports
         ]
     )
+
+
+@router.post("/admin/watchdog", response_model=WatchdogResponse)
+def admin_watchdog(
+    body: WatchdogRequest,
+    request: Request,
+    x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
+) -> WatchdogResponse | JSONResponse:
+    """主动感知看门狗：巡检记忆库，产出「值得说的事」（零 LLM / 零外部 API）。
+
+    - 指定 user_id：只巡检该用户
+    - 省略 user_id：巡检所有有活跃记忆的用户
+    - 返回 items[]；为空 = 无事发生，Host 应静默（cron 脚本据此不打扰）
+    """
+    denied = _require_admin(request, x_admin_token)
+    if denied is not None:
+        return denied
+    svc: WatchdogService | None = getattr(request.app.state, "watchdog_service", None)
+    if svc is None:
+        return _err(503, "unavailable", "watchdog service not configured")
+    from datetime import date
+
+    today = date.fromisoformat(body.today) if body.today else date.today()
+    if body.user_id:
+        users = [body.user_id]
+    else:
+        repo = getattr(request.app.state, "memory_service", None)
+        users = repo.repo.list_distinct_user_ids() if repo else []
+    items: list[WatchdogItemOut] = []
+    for uid in users:
+        for it in svc.run(user_id=uid, today=today):
+            items.append(
+                WatchdogItemOut(
+                    kind=it.kind,
+                    title=it.title,
+                    detail=it.detail,
+                    severity=it.severity,
+                    related=it.related,
+                )
+            )
+    METRICS.incr("watchdog_total")
+    return WatchdogResponse(items=items, users=users)
 
 
 @router.post("/admin/reembed", response_model=ReembedResponse)

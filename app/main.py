@@ -25,6 +25,7 @@ async def lifespan(app: FastAPI):
     app.state.feedback_service = container.feedback_service
     app.state.l3_service = container.l3_service
     app.state.consolidation_service = container.consolidation_service
+    app.state.watchdog_service = container.watchdog_service
     app.state.settings = container.settings
     try:
         yield
