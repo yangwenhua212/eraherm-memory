@@ -164,7 +164,7 @@ ERAHERM_RECALL_MIN_SCORE=0.25
 | 支柱 | 解决什么 |
 |------|----------|
 | **分层记忆 L1/L2/L3** | 会话热数据 / 长期事实 / 冷归档，关键钉死不丢 |
-| **轻量知识图谱** | 结构推理：「改 A 会影响谁」 |
+| **轻量知识图谱** | 结构推理：「改 A 会影响谁」。实体/关系自动抽取：技术关系走本地规则，人物/事实关系走 LLM（`ERAHERM_LLM_BACKEND=openai`），敏感内容自动拦截不出网 |
 | **反馈闭环** | 点赞 / 点踩 / **纠正** → Reflection → 写回并优先 |
 
 当前版本 **0.10.1**：MCP、整理压缩、`eraherm-reembed`、Hermes 内置 Tools、召回假阳性/多 pinned 修复。详见 [CHANGELOG](CHANGELOG.md)、[ROADMAP](docs/ROADMAP.md)。

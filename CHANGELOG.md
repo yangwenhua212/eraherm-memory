@@ -7,6 +7,8 @@
 
 ### Added
 - 主动感知看门狗（phase 9）：`POST /v1/admin/watchdog` 巡检记忆库，产出「值得说的事」——倒计时事件（D-7/D-3/D-1/当天）、被遗忘的高价值记忆（importance≥0.8 且从未被 recall）、健康信号。**零 LLM / 零外部 API**（SQLite + 正则 + 标准库）。敏感记忆（秘密/红线类）绝不进入推送。回归测试 `tests/test_watchdog.py`（5 例）
+- 生产启用 LLM 图谱抽取/反射（`ERAHERM_LLM_BACKEND=openai`，DeepSeek `deepseek-chat`）：规则抽取器抽不出的人物/事实关系（「老大 related_to 唐美女」）现在由 LLM 抽取，图谱支柱真正兑现
+- **敏感内容防护**（`app/sensitive.py`）：LLM 抽取/反射的输入命中敏感词（秘密/红线/不要告诉/不能提 等）→ 直接走本地规则/heuristic，**内容绝不出网**。watchdog 的敏感推送过滤改复用同一词表（一份定义，三处生效）。回归测试 `tests/test_llm_sensitive_guard.py`（10 例）
 
 ## [0.10.1] - 2026-08-25
 

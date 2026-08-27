@@ -193,6 +193,7 @@ memory.evolve()     # 纠正即进化（新事实压过旧版）
 | `AgentMemory` 五能力封装（learn/remember/reflect/recall/evolve） | 已实现 |
 | `fastembed` + `recall_min_score` | 已实现（见 CHANGELOG Unreleased / 待收 0.9.0） |
 | **主动感知看门狗（phase 9）** | 已实现：`POST /v1/admin/watchdog` 巡检（倒计时/被遗忘宝石/健康信号），零 LLM；敏感记忆（秘密/红线）绝不推送；Host 侧 cron 每 6h 巡检、有料才推飞书（`~/.hermes/scripts/eraherm-watchdog.sh`） |
+| **LLM 图谱抽取/反射（生产启用）** | 已实现：`ERAHERM_LLM_BACKEND=openai`（DeepSeek `deepseek-chat`）。规则抽不出的人物/事实关系（「老大 related_to 唐美女」）由 LLM 抽取；纠正反射走 LLM 分析。**敏感内容防护**：含 秘密/红线/不要告诉 等词的输入自动拦截走本地，绝不出网（`app/sensitive.py`，词表与 watchdog 共用） |
 
 ## 阶段 8+ 后续（有触发再做）
 
@@ -201,7 +202,7 @@ memory.evolve()     # 纠正即进化（新事实压过旧版）
 | 多实例 + 可靠异步 | JobQueue → ARQ/Redis；Consolidation → Celery Beat |
 | L3 多机 | ArchiveStore → S3 |
 | 主库并发 | MemoryRepo → Postgres |
-| 冲突判定要更准 | 可选 LLM 冲突判定 Adapter |
+| 冲突判定要更准 | ✅ 已做：LLM 冲突判定 Adapter（`llm_reflection.py`，生产已启用，敏感内容自动回落 heuristic） |
 | MCP 远程共享 | Streamable HTTP transport |
 | 第二个真人用户 / 要宣传 | 再补开源承接（Issue 模板等） |
 

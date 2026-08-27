@@ -42,13 +42,8 @@ _EVENT_HINTS = re.compile(
 _REMIND_WINDOWS = (0, 1, 3, 7)
 
 # 敏感记忆：含这些词的记忆绝不主动推送（秘密/红线类，推送=泄露）
-_SENSITIVE_HINTS = re.compile(
-    r"(秘密|红线|绝不让|绝对不提|不要告诉|别让.*知道|保密|只告诉|私下|不能提|禁止提及)",
-)
-
-
-def _is_sensitive(content: str) -> bool:
-    return bool(_SENSITIVE_HINTS.search(content or ""))
+# 词表与 LLM 抽取/反射共用 app.sensitive（一份定义，三处生效）
+from app.sensitive import contains_sensitive as _is_sensitive
 
 
 @dataclass
