@@ -6,6 +6,7 @@ from __future__ import annotations
 from app.adapters.openai_llm import OpenAICompatibleLLM
 from app.graph.extractor import RuleGraphExtractor
 from app.ports.graph_store import ExtractedEntity, ExtractedRelation, ExtractionResult
+from app.sensitive import contains_sensitive
 
 
 _SYSTEM = """你是知识图谱抽取器。从文本中抽取实体与关系，只输出 JSON：
@@ -59,6 +60,9 @@ class FallbackGraphExtractor:
         self.fallback = fallback or RuleGraphExtractor()
 
     def extract(self, text: str) -> ExtractionResult:
+        # 敏感内容绝不外发（LLM 抽取 = 内容出网）：直接走本地规则
+        if contains_sensitive(text):
+            return self.fallback.extract(text)
         try:
             result = self.primary.extract(text)
             if result.relations or result.entities:

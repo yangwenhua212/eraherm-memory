@@ -9,6 +9,7 @@ from app.adapters.heuristic_reflection import HeuristicReflectionPipeline
 from app.adapters.openai_llm import OpenAICompatibleLLM
 from app.models import MemoryType
 from app.ports.reflection import ReflectionDraft
+from app.sensitive import contains_sensitive
 
 _SYSTEM = """你是 Agent 记忆反思器。根据用户反馈分析错误原因，输出 JSON：
 {
@@ -34,6 +35,15 @@ class LLMReflectionPipeline:
         answer_text: str | None,
         related_contents: Sequence[str],
     ) -> ReflectionDraft:
+        # 敏感内容绝不外发（LLM 反射 = 内容出网）：直接走启发式
+        probe = " ".join(related_contents) + " " + (correction_text or "")
+        if contains_sensitive(probe):
+            return self._fallback.reflect(
+                feedback_type=feedback_type,
+                correction_text=correction_text,
+                answer_text=answer_text,
+                related_contents=related_contents,
+            )
         user = (
             f"feedback_type={feedback_type}\n"
             f"correction_text={correction_text or ''}\n"
