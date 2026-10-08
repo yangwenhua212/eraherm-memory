@@ -13,7 +13,7 @@
 
 ### Changed
 
-- **二段重排：排序由相关性主导**。排序键从 `score`（=base×rel）改为 `relevance + 0.2×base + pinned_boost`，否则又长又 pinned 的记忆会压过更相关的短记忆（实测：「更相关的短记忆被又长又 pinned 的记忆挤到第二）
+- **二段重排：排序由相关性主导**。排序键从 `score`（=base×rel）改为 `relevance + 0.2×base + pinned_boost`，否则又长又 pinned 的记忆会压过更相关的短记忆（实测：更相关的短记忆被那条又长又 pinned 的定案记忆挤到第二）
 - `recall_gate_mode` 新增（默认 `relevance`）。旧绝对分门禁保留为 `recall_gate_mode=score` 回滚开关；旧配置 `recall_min_score` / `recall_min_score_no_lexical` 在 `relevance` 模式下按 `rel = (score-0.15)/0.85` 换算，严格度语义不变；`min_score<=0` 仍表示关闭门禁
 
 ### Added

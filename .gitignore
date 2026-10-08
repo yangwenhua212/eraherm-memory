@@ -7,6 +7,8 @@ __pycache__/
 .venv/
 venv/
 .env
+.env.*
+!.env.example
 *.db
 dist/
 build/
@@ -22,7 +24,6 @@ htmlcov/
 _local_backup/
 identity_proxy.py
 activity_*.json
-activity_other.json
 run.sh
 watchdog.sh
 start_mcp.sh

@@ -77,7 +77,7 @@ def test_normal_text_calls_llm_extractor() -> None:
     )
     result = extractor.extract(NORMAL_TEXT)
     assert llm.called == 1
-    assert result.relations[0].from_name == "杨文华"
+    assert result.relations[0].from_name == "小明"
     assert result.relations[0].to_name == "EraHerm"
 
 

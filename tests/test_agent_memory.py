@@ -89,4 +89,4 @@ def test_recall_text_human_readable(sdk_client: MemoryClient):
     memory = AgentMemory(sdk_client, user_id="u_agent")
     memory.remember("用户叫小明", pinned=True, memory_type="identity")
     text = memory.recall_text("用户名")
-    assert "杨文华" in text
+    assert "小明" in text

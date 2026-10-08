@@ -70,7 +70,7 @@ def test_countdown_detects_upcoming_event(wd):
 def test_countdown_ignores_past_and_non_event_dates(wd):
     memory, svc = wd
     memory.remember(
-        content="纠正（2026-08-03）：用户喜欢蛋炒饭",
+        content="纠正（2026-08-03）：用户喜欢喝冰美式",
         user_id="u_wd",
         importance=0.8,
         extract_graph=False,
