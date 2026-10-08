@@ -20,6 +20,7 @@
 | [0007](0007-python-sdk.md) | 提供 Python HTTP SDK | Accepted |
 | [0008](0008-agpl-commercial-dual-license.md) | AGPL-3.0 与商业双许可 | Superseded |
 | [0009](0009-mit-license.md) | 许可改为 MIT（生态扩散） | Accepted |
+| [0010](0010-recall-gate-relevance.md) | 召回门禁判「相关性」，不判绝对分 | Accepted |
 
 ## 何时必须写 ADR
 

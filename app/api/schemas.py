@@ -115,6 +115,11 @@ class RecallItemResponse(BaseModel):
     score: float
     pinned: bool
     layer: str
+    # 诊断用中间量（2026-10-08 加）：排查「为什么这条召回不到」时不必在客户端重算
+    relevance: float = 0.0
+    lexical: float = 0.0
+    vector_sim: float = 0.0
+    base: float = 0.0
 
 
 class RecallResponse(BaseModel):

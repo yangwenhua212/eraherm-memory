@@ -68,23 +68,47 @@ def test_cjk_lexical_bigrams_detect_overlap() -> None:
 
 
 def test_gates_raise_bar_without_lexical() -> None:
+    """旧行为（mode='score'）：绝对分门禁，零词法时门槛更高。"""
     assert (
         _passes_recall_gates(
-            score=0.35, lexical=0.0, min_score=0.25, min_score_no_lexical=0.38
+            score=0.35, lexical=0.0, min_score=0.25, min_score_no_lexical=0.38,
+            mode="score",
         )
         is False
     )
     assert (
         _passes_recall_gates(
-            score=0.40, lexical=0.0, min_score=0.25, min_score_no_lexical=0.38
+            score=0.40, lexical=0.0, min_score=0.25, min_score_no_lexical=0.38,
+            mode="score",
         )
         is True
     )
     assert (
         _passes_recall_gates(
-            score=0.30, lexical=0.5, min_score=0.25, min_score_no_lexical=0.38
+            score=0.30, lexical=0.5, min_score=0.25, min_score_no_lexical=0.38,
+            mode="score",
         )
         is True
+    )
+
+
+def test_relevance_gate_is_age_independent() -> None:
+    """新默认（mode='relevance'）：只看相关性，分数再低（老记忆）也不影响准入。"""
+    # 分数被年龄压到 0.02，但相关性达标 → 放行
+    assert (
+        _passes_recall_gates(
+            score=0.02, relevance=0.60, lexical=0.5,
+            min_score=0.18, min_score_no_lexical=0.55,
+        )
+        is True
+    )
+    # 零词法 → 用更严的相关性门槛
+    assert (
+        _passes_recall_gates(
+            score=0.90, relevance=0.40, lexical=0.0,
+            min_score=0.18, min_score_no_lexical=0.55,
+        )
+        is False
     )
 
 
@@ -118,7 +142,7 @@ def test_multi_pinned_query_prefers_matching_fact(tmp_path: Path) -> None:
 
     name_hits = svc.recall(user_id="u_pin", query="我的用户名是什么", top_k=5)
     assert name_hits, "identity query should recall"
-    assert "杨文华" in name_hits[0].content
+    assert "example_user" in name_hits[0].content
 
     db_hits = svc.recall(user_id="u_pin", query="数据库用什么", top_k=5)
     assert db_hits

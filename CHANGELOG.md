@@ -5,7 +5,20 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **召回门禁量纲错配：记忆超过约 28 天后全库召回为空**（2026-10-08 生产实测）。`score = base × (0.15+0.85·rel)` 且 `base` 含 `exp(-decay_lambda·age)`，门禁却卡绝对分（0.25/0.38）——**分数上限等于 `base`**，`age > 27.7 天` 时即使 `relevance=1.0` 也过不了门禁。生产库 9 条活跃记忆 `base` 全在 0.025~0.099，recall 对任何查询（含同义换词问法）都返回空；线上用户唯一能过门禁的是一条 3 天前的 2920 字镜像长文，导致不同查询返回同一条。修复见 [ADR 0010](docs/adr/0010-recall-gate-relevance.md)：门禁改判**相关性**（`recall_rel_min=0.18` / `recall_rel_min_no_lexical=0.55`），`score` 退居排序。回归测试 `tests/test_recall_gate_age_decoupled.py`
+- **pinned 记忆参与年龄衰减**：与「钉死记忆不因衰减删除」的承诺矛盾——没被删，但已召不回。改为 `recall_pinned_no_decay=true`（pinned 走 `decay=0`）
+- **长文「大杂烩」绕过词法门禁**：一条几千字的记忆与几乎所有查询都有词法重叠。词法信号改为按内容长度**二次折扣**（`recall_lexical_len_norm=300`，折扣后低于 `_LEX_EVIDENCE_MIN=0.02` 视为零词法，走从严门禁）。实测把 2920 字镜像长文从「所有查询都命中」压回门禁之下
+
+### Changed
+
+- **二段重排：排序由相关性主导**。排序键从 `score`（=base×rel）改为 `relevance + 0.2×base + pinned_boost`，否则又长又 pinned 的记忆会压过更相关的短记忆（实测：「更相关的短记忆被又长又 pinned 的记忆挤到第二）
+- `recall_gate_mode` 新增（默认 `relevance`）。旧绝对分门禁保留为 `recall_gate_mode=score` 回滚开关；旧配置 `recall_min_score` / `recall_min_score_no_lexical` 在 `relevance` 模式下按 `rel = (score-0.15)/0.85` 换算，严格度语义不变；`min_score<=0` 仍表示关闭门禁
+
 ### Added
+
+- `/v1/recall` 响应项新增诊断字段 `relevance` / `lexical` / `vector_sim` / `base`（排查「为什么这条召回不到」不必在客户端重算）
 - 主动感知看门狗（phase 9）：`POST /v1/admin/watchdog` 巡检记忆库，产出「值得说的事」——倒计时事件（D-7/D-3/D-1/当天）、被遗忘的高价值记忆（importance≥0.8 且从未被 recall）、健康信号。**零 LLM / 零外部 API**（SQLite + 正则 + 标准库）。敏感记忆（秘密/红线类）绝不进入推送。回归测试 `tests/test_watchdog.py`（5 例）
 - 生产启用 LLM 图谱抽取/反射（`ERAHERM_LLM_BACKEND=openai`，DeepSeek `deepseek-chat`）：规则抽取器抽不出的人物/事实关系（「用户 related_to 合作方」）现在由 LLM 抽取，图谱支柱真正兑现
 - **敏感内容防护**（`app/sensitive.py`）：LLM 抽取/反射的输入命中敏感词（秘密/红线/不要告诉/不能提 等）→ 直接走本地规则/heuristic，**内容绝不出网**。watchdog 的敏感推送过滤改复用同一词表（一份定义，三处生效）。回归测试 `tests/test_llm_sensitive_guard.py`（10 例）
@@ -37,7 +50,7 @@
 
 ### Fixed
 - 纠正即进化回归：纠正后新事实无法排第一（嵌入分被模板拉低 0.244 + 零词法被 `min_score_no_lexical` 挡）。修复后新事实稳定第一（实测 0.619 [pinned] 压过旧事实）
-- 上线检查表验收：补写 hermes-user 身份记忆（含「用户名/名字」问法关键词，词法重叠生效）；清理 2 条无 user_id 孤儿测试残留
+- 上线检查表验收：补写生产用户身份记忆（含「用户名/名字」问法关键词，词法重叠生效）；清理 2 条无 user_id 孤儿测试残留
 
 [0.10.0]: https://github.com/yangwenhua212/eraherm-memory/releases/tag/v0.10.0
 

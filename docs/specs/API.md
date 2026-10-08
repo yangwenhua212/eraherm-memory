@@ -139,6 +139,8 @@ Remember：写入一条内容（先进 L1；符合策略则写 L2）。
 }
 ```
 
+> 门禁判**相关性**而不是绝对分（见 [ADR 0010](../adr/0010-recall-gate-relevance.md)）：`ERAHERM_RECALL_REL_MIN`（有词法重叠，默认 `0.18`）/ `ERAHERM_RECALL_REL_MIN_NO_LEXICAL`（零词法，默认 `0.55`）。请求参数 `min_score` 会抬高有词法档的门槛，传 `0` 关闭门禁。
+
 响应：`200`
 
 ```json
@@ -150,7 +152,11 @@ Remember：写入一条内容（先进 L1；符合策略则写 L2）。
       "memory_type": "fact",
       "score": 0.91,
       "pinned": true,
-      "layer": "L2"
+      "layer": "L2",
+      "relevance": 0.77,
+      "lexical": 0.5,
+      "vector_sim": 0.88,
+      "base": 1.0
     }
   ],
   "recommendations": [

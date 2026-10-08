@@ -32,6 +32,19 @@ class Settings(BaseSettings):
     recall_min_score_no_lexical: float = 0.38
     # Mild boost so equally relevant pinned facts win ties (not a hard prepend).
     recall_pinned_score_boost: float = 0.05
+    # 门禁量纲。score = base × (0.15+0.85·rel)，而 base 含 exp(-λ·age) 会随年龄塌陷：
+    # 卡绝对分时 age > ~28d 的记忆（即使 relevance=1.0）永远过不了门禁。
+    # "relevance" = 门禁只判相关性（与年龄解耦），score 仅用于排序；"score" = 旧行为（回滚开关）。
+    recall_gate_mode: str = "relevance"
+    recall_rel_min: float = 0.18            # 有词法重叠时的相关性门禁（词法重叠本身已是强证据）
+    recall_rel_min_no_lexical: float = 0.55  # 零词法重叠（更严，挡纯向量蹭分）
+    # 二段重排：rel 主导、base 小幅加权，否则又长又 pinned 的记忆会压过更相关的短记忆。
+    recall_rank_base_weight: float = 0.2
+    # 词法信号的长度折扣：内容超过该字数后，命中一个词的证据强度按长度线性衰减。
+    # 不折扣的话，几千字的「大杂烩」记忆会与几乎所有查询产生词法重叠，绕过词法门禁。
+    recall_lexical_len_norm: int = 300
+    # pinned（核心记忆：身份/红线/偏好）不参与年龄衰减。
+    recall_pinned_no_decay: bool = True
     l1_max_items_per_session: int = 200
     extract_on_remember: bool = True
     auto_importance: bool = True

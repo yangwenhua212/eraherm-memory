@@ -90,7 +90,7 @@ uvicorn app.main:app --reload --port 8000
 | **多跳图查询变慢 / 要 Cypher** | `ERAHERM_GRAPH_BACKEND=neo4j`<br>`ERAHERM_NEO4J_URI=bolt://...`<br>`ERAHERM_NEO4J_USER=...`<br>`ERAHERM_NEO4J_PASSWORD=...` | `pip install 'eraherm-memory[neo4j]'` | 图权威源二选一，避免双写无迁移 |
 | **Reflection 拖慢请求** | `ERAHERM_FEEDBACK_ASYNC=true` | 无需新依赖（内存队列） | 用 `GET /v1/feedback/{id}` 轮询；要可靠队列再换 ARQ |
 | **挂真 Agent / 要语义召回准** | `ERAHERM_EMBEDDING_BACKEND=fastembed` + `MODEL=BAAI/bge-small-zh-v1.5` + `DIM=512`<br>或 `openai` + API Key + 维度一致 | `pip install 'eraherm-memory[fastembed]'` 或已有 httpx | **生产必改**；与 hashing 向量空间不兼容，换后端需重建向量 |
-| **压制硬拉低分命中** | `ERAHERM_RECALL_MIN_SCORE=0.25`（默认）；请求可传 `min_score` 覆盖 | 无 | 不相关查询应返回空 `items[]`；语料多了可略调高 |
+| **压制硬拉低分命中 / 调召回松紧** | `ERAHERM_RECALL_REL_MIN=0.18`（有词法重叠）/ `ERAHERM_RECALL_REL_MIN_NO_LEXICAL=0.55`（零词法） | 无 | 门禁判**相关性**（见 [ADR 0010](adr/0010-recall-gate-relevance.md)）。不相关查询应返回空 `items[]`；`ERAHERM_RECALL_GATE_MODE=score` 可回滚旧绝对分行为 |
 | **换 embedding 后端 / 维度** | 先改 `.env` 的 backend/model/dim，再跑迁移 | 见下节 | **禁止双轨**；旧向量空间一次性覆盖 |
 | **关掉主动预警/推荐** | `ERAHERM_PROACTIVE_ALERTS_ENABLED=false`<br>`ERAHERM_PROACTIVE_RECOMMEND_ENABLED=false` | 无 | Host 也可忽略返回的空数组字段 |
 | **夜间记忆整理** | `ERAHERM_CONSOLIDATION_ENABLED=true` | `pip install 'eraherm-memory[scheduler]'` | 或手动 `eraherm-consolidate` / admin API |

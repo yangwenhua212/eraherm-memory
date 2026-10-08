@@ -256,6 +256,10 @@ def recall(body: RecallRequest, request: Request) -> RecallResponse:
                 score=i.score,
                 pinned=i.pinned,
                 layer=i.layer,
+                relevance=i.relevance,
+                lexical=i.lexical,
+                vector_sim=i.vector_sim,
+                base=i.base,
             )
             for i in items
         ],

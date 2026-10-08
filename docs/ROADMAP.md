@@ -192,6 +192,7 @@ memory.evolve()     # 纠正即进化（新事实压过旧版）
 | `HermesMemoryTools` 内置 tool | 已实现 |
 | `AgentMemory` 五能力封装（learn/remember/reflect/recall/evolve） | 已实现 |
 | `fastembed` + `recall_min_score` | 已实现（见 CHANGELOG Unreleased / 待收 0.9.0） |
+| **召回门禁改判相关性（ADR 0010，2026-10-08）** | 已实现：绝对分门禁 + `exp(-λ·age)` 会让 `age > 28d` 的记忆永远召不回（线上表现为全库召回为空）。门禁改判 `relevance`（0.18 / 零词法 0.55），pinned 不参与衰减，排序改相关性主导，长文词法按长度二次折扣；`recall_gate_mode=score` 可回滚。回归 `tests/test_recall_gate_age_decoupled.py` |
 | **主动感知看门狗（phase 9）** | 已实现：`POST /v1/admin/watchdog` 巡检（倒计时/被遗忘宝石/健康信号），零 LLM；敏感记忆（秘密/红线）绝不推送；Host 侧 cron 每 6h 巡检、有料才推飞书（`~/.hermes/scripts/eraherm-watchdog.sh`） |
 | **LLM 图谱抽取/反射（生产启用）** | 已实现：`ERAHERM_LLM_BACKEND=openai`（DeepSeek `deepseek-chat`）。规则抽不出的人物/事实关系（「用户 related_to 合作方」）由 LLM 抽取；纠正反射走 LLM 分析。**敏感内容防护**：含 秘密/红线/不要告诉 等词的输入自动拦截走本地，绝不出网（`app/sensitive.py`，词表与 watchdog 共用） |
 

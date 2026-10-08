@@ -58,6 +58,22 @@ def effective_score(
     return importance * math.exp(-decay_lambda * age_days(created_at, now)) * weight
 
 
+def decay_lambda_for(
+    *,
+    pinned: bool,
+    row_lambda: float | None,
+    default_lambda: float,
+    pinned_no_decay: bool,
+) -> float:
+    """pinned（核心记忆）不参与年龄衰减——兑现 ROADMAP「pinned 永不为衰减」。
+
+    绝对分门禁 + 年龄衰减会让 age > ~28 天的记忆永远召不回（2026-10-08 实测全库召回为空）。
+    """
+    if pinned_no_decay and pinned:
+        return 0.0
+    return default_lambda if row_lambda is None else row_lambda
+
+
 @dataclass
 class RememberResult:
     id: str
@@ -80,6 +96,7 @@ class RecallItem:
     relevance: float = 0.0
     lexical: float = 0.0
     vector_sim: float = 0.0
+    base: float = 1.0
 
 
 @dataclass
@@ -297,6 +314,8 @@ class MemoryService:
         threshold = self.settings.recall_min_score if min_score is None else min_score
         now = self.clock.now()
         lam = self.settings.decay_lambda_default
+        pinned_no_decay = self.settings.recall_pinned_no_decay
+        gate_mode = (self.settings.recall_gate_mode or "relevance").strip().lower()
         tokens = _tokenize(query)
         query_vec = self.embedding.embed([query])[0]
         vector_weight = self.settings.recall_vector_weight
@@ -317,8 +336,21 @@ class MemoryService:
         if tenant_id is not None:
             row_map = {k: v for k, v in row_map.items() if v.tenant_id == tenant_id}
 
+        # 词法信号按内容长度折扣（防长文「大杂烩」绕过门禁）
+        lex_norm = self.settings.recall_lexical_len_norm
+
+        def _lex_of(content: str) -> float:
+            return _length_adjusted_lexical(
+                _lexical_similarity(content, tokens), len(content), lex_norm
+            )
+
         for mid, row in row_map.items():
-            decay = row.decay_lambda if row.decay_lambda is not None else lam
+            decay = decay_lambda_for(
+                pinned=row.pinned,
+                row_lambda=row.decay_lambda,
+                default_lambda=lam,
+                pinned_no_decay=pinned_no_decay,
+            )
             base = effective_score(
                 importance=row.importance,
                 weight=row.weight,
@@ -327,7 +359,7 @@ class MemoryService:
                 now=now,
             )
             sim = _clamp01(hit_scores.get(mid, 0.0))
-            lex = _lexical_similarity(row.content, tokens)
+            lex = _lex_of(row.content)
             relevance = vector_weight * sim + lexical_weight * lex
             score = base * (0.15 + 0.85 * relevance)
             by_id[mid] = RecallItem(
@@ -340,6 +372,7 @@ class MemoryService:
                 relevance=relevance,
                 lexical=lex,
                 vector_sim=sim,
+                base=base,
             )
 
         # Also include pinned L2 not returned by vector top list
@@ -349,7 +382,12 @@ class MemoryService:
             ):
                 if row.id in by_id:
                     continue
-                decay = row.decay_lambda if row.decay_lambda is not None else lam
+                decay = decay_lambda_for(
+                    pinned=row.pinned,
+                    row_lambda=row.decay_lambda,
+                    default_lambda=lam,
+                    pinned_no_decay=pinned_no_decay,
+                )
                 base = effective_score(
                     importance=row.importance,
                     weight=row.weight,
@@ -358,7 +396,7 @@ class MemoryService:
                     now=now,
                 )
                 sim = _clamp01(cosine(query_vec, self.embedding.embed([row.content])[0]))
-                lex = _lexical_similarity(row.content, tokens)
+                lex = _lex_of(row.content)
                 relevance = vector_weight * sim + lexical_weight * lex
                 by_id[row.id] = RecallItem(
                     id=row.id,
@@ -370,6 +408,7 @@ class MemoryService:
                     relevance=relevance,
                     lexical=lex,
                     vector_sim=sim,
+                    base=base,
                 )
 
         # L1 session items (on-the-fly embedding)
@@ -379,11 +418,16 @@ class MemoryService:
                     importance=item.importance,
                     weight=item.weight,
                     created_at=item.created_at,
-                    decay_lambda=lam,
+                    decay_lambda=decay_lambda_for(
+                        pinned=item.pinned,
+                        row_lambda=None,
+                        default_lambda=lam,
+                        pinned_no_decay=pinned_no_decay,
+                    ),
                     now=now,
                 )
                 sim = _clamp01(cosine(query_vec, self.embedding.embed([item.content])[0]))
-                lex = _lexical_similarity(item.content, tokens)
+                lex = _lex_of(item.content)
                 relevance = vector_weight * _clamp01(sim) + lexical_weight * lex
                 score = base * (0.15 + 0.85 * relevance)
                 # Prefer L2 entry if same id already promoted
@@ -399,28 +443,66 @@ class MemoryService:
                     relevance=relevance,
                     lexical=lex,
                     vector_sim=sim,
+                    base=base,
                 )
 
         boost = self.settings.recall_pinned_score_boost
         no_lex_floor = self.settings.recall_min_score_no_lexical
+        # 门禁量纲：relevance 模式只判相关性（与年龄解耦）；score 模式为旧行为（回滚开关）。
+        rel_min = self.settings.recall_rel_min
+        rel_min_no_lex = self.settings.recall_rel_min_no_lexical
+        if gate_mode == "relevance":
+            # 兼容旧的绝对分门禁配置：<=0 关闭该档，非默认值换算到相关性空间。
+            legacy_lex = _legacy_rel_floor(
+                self.settings.recall_min_score, _DEFAULT_MIN_SCORE
+            )
+            legacy_nolex = _legacy_rel_floor(
+                self.settings.recall_min_score_no_lexical, _DEFAULT_MIN_SCORE_NO_LEXICAL
+            )
+            if legacy_lex is not None:
+                rel_min = legacy_lex
+            if legacy_nolex is not None:
+                rel_min_no_lex = legacy_nolex
+            if min_score is not None:
+                if min_score <= 0:
+                    rel_min = 0.0
+                    rel_min_no_lex = 0.0
+                else:
+                    rel_min = max(rel_min, min_score)
         candidates = [
             c
             for c in by_id.values()
             if _passes_recall_gates(
                 score=c.score,
+                relevance=c.relevance,
                 lexical=c.lexical,
-                min_score=threshold,
-                min_score_no_lexical=no_lex_floor,
+                min_score=threshold if gate_mode == "score" else rel_min,
+                min_score_no_lexical=(
+                    no_lex_floor if gate_mode == "score" else rel_min_no_lex
+                ),
+                mode="score" if gate_mode == "score" else "relevance",
             )
         ]
         # Rank by score; pinned only gets a mild tie-break boost (no hard prepend —
         # avoids identity/db/food pinned fighting for unrelated queries).
         if not include_pinned:
             candidates = [c for c in candidates if not c.pinned]
-        candidates.sort(
-            key=lambda x: x.score + (boost if x.pinned and include_pinned else 0.0),
-            reverse=True,
-        )
+        if gate_mode == "relevance":
+            # 二段重排：relevance 主导 + base 小幅加权。时间/重要度只影响名次，不再决定生死。
+            base_w = self.settings.recall_rank_base_weight
+            candidates.sort(
+                key=lambda x: (
+                    x.relevance
+                    + base_w * min(max(x.base, 0.0), 1.0)
+                    + (boost if x.pinned and include_pinned else 0.0)
+                ),
+                reverse=True,
+            )
+        else:
+            candidates.sort(
+                key=lambda x: x.score + (boost if x.pinned and include_pinned else 0.0),
+                reverse=True,
+            )
         result = candidates[:top_k]
 
         self._touch_access([i.id for i in result if i.layer == "L2"])
@@ -569,16 +651,69 @@ def _clamp01(x: float) -> float:
     return max(0.0, min(1.0, x))
 
 
+# 旧门禁配置的默认值（用来判断调用方是否显式改过）
+_DEFAULT_MIN_SCORE = float(Settings.model_fields["recall_min_score"].default)
+_DEFAULT_MIN_SCORE_NO_LEXICAL = float(
+    Settings.model_fields["recall_min_score_no_lexical"].default
+)
+
+
+def _legacy_rel_floor(score_floor: float, default: float) -> float | None:
+    """把旧的「绝对分门禁」配置换算到相关性空间。
+
+    score = base × (0.15 + 0.85·rel) ⇒ rel = (score - 0.15) / 0.85。
+    - `<= 0`    → 0.0（显式关闭这一档门禁）
+    - 等于默认值 → None（表示「改用新的相关性默认值」）
+    - 其他      → 按上式换算，保证老配置的严格度语义不变
+    """
+    if score_floor <= 0:
+        return 0.0
+    if abs(score_floor - default) < 1e-9:
+        return None
+    return max(0.0, (score_floor - 0.15) / 0.85)
+
+
+# 判定「有词法证据」的最小值：低于此视为零词法（从严门禁）。
+# 长文二次折扣后零星命中的 lex 会掉到这以下，从而被归入从严档。
+_LEX_EVIDENCE_MIN = 0.02
+
+
+def _length_adjusted_lexical(lex: float, content_len: int, full_credit_len: int) -> float:
+    """长文里「命中一个词」是弱证据：超过 full_credit_len 后按长度**二次**折扣。
+
+    不折扣的话，一条几千字的「大杂烩」记忆会与几乎所有查询产生词法重叠，
+    从而绕过词法门禁（2026-10-08 hermes-user 实测：2920 字 sync_turn 镜像长文
+    对 6/8 个无关查询都产生了词法重叠）。二次折扣保证长文里的零星命中
+    掉到 _LEX_EVIDENCE_MIN 以下，归入「零词法」从严门禁。
+    """
+    if full_credit_len <= 0 or content_len <= full_credit_len:
+        return lex
+    ratio = full_credit_len / content_len
+    return lex * ratio * ratio
+
+
 def _passes_recall_gates(
     *,
     score: float,
+    relevance: float = 0.0,
     lexical: float,
     min_score: float,
     min_score_no_lexical: float,
+    mode: str = "relevance",
 ) -> bool:
-    """Absolute score gate; raise the bar when there is zero token overlap."""
-    if min_score > 0 and score < min_score:
-        return False
-    if lexical <= 0 and min_score_no_lexical > 0 and score < min_score_no_lexical:
-        return False
-    return True
+    """Recall gate.
+
+    mode="relevance"（默认）：只判相关性，与记忆年龄解耦。score 含 exp(-λ·age)，
+    卡绝对分会让 age > ~28 天的记忆永远召不回（2026-10-08 实测全库召回为空）。
+    mode="score"：旧行为（绝对分门禁），保留作回滚开关。
+    """
+    if mode == "score":
+        if min_score > 0 and score < min_score:
+            return False
+        if lexical <= 0 and min_score_no_lexical > 0 and score < min_score_no_lexical:
+            return False
+        return True
+    # 零词法重叠 → 用更严的相关性门槛（挡纯向量蹭分，如「服务器配置」）
+    has_lex = lexical >= _LEX_EVIDENCE_MIN
+    floor = min_score if has_lex else min_score_no_lexical
+    return relevance >= floor
