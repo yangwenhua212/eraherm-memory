@@ -58,20 +58,50 @@ def effective_score(
     return importance * math.exp(-decay_lambda * age_days(created_at, now)) * weight
 
 
+def stability_boost(access_count: int, *, alpha: float, cap: float) -> float:
+    """命中增稳：被召回过的记忆衰减变慢（间隔重复的轻量版）。
+
+    boost = min(1 + alpha·ln(1+access_count), cap)
+
+    用 ln 而非线性/log2：增长慢且有界，老条目不会变成「永生」。
+    命中 0 次 = 1.0（行为与旧版一致）。
+    """
+    n = max(int(access_count or 0), 0)
+    if n == 0 or alpha <= 0:
+        return 1.0
+    return min(1.0 + alpha * math.log1p(n), cap)
+
+
 def decay_lambda_for(
     *,
     pinned: bool,
     row_lambda: float | None,
     default_lambda: float,
     pinned_no_decay: bool,
+    access_count: int = 0,
+    boost_enabled: bool = False,
+    boost_alpha: float = 0.35,
+    boost_cap: float = 3.0,
+    max_half_life_days: float = 365.0,
 ) -> float:
     """pinned（核心记忆）不参与年龄衰减——兑现 ROADMAP「pinned 永不为衰减」。
 
     绝对分门禁 + 年龄衰减会让 age > ~28 天的记忆永远召不回（2026-10-08 实测全库召回为空）。
+    非 pinned 的记忆按命中次数增稳：λ_eff = λ / boost（见 stability_boost），
+    并受 max_half_life_days 硬护栏约束（防「永生条目」）。
     """
     if pinned_no_decay and pinned:
         return 0.0
-    return default_lambda if row_lambda is None else row_lambda
+    lam = default_lambda if row_lambda is None else row_lambda
+    if not boost_enabled or lam <= 0:
+        return lam
+    lam = lam / stability_boost(
+        access_count, alpha=boost_alpha, cap=boost_cap
+    )
+    if max_half_life_days and max_half_life_days > 0:
+        # ln2/λ ≤ max → λ ≥ ln2/max（护栏只对「衰减过慢」生效）
+        lam = max(lam, math.log(2) / max_half_life_days)
+    return lam
 
 
 @dataclass
@@ -97,6 +127,8 @@ class RecallItem:
     lexical: float = 0.0
     vector_sim: float = 0.0
     base: float = 1.0
+    hit_boost: float = 1.0
+    decay_lambda_eff: float = 0.0
 
 
 @dataclass
@@ -315,6 +347,11 @@ class MemoryService:
         now = self.clock.now()
         lam = self.settings.decay_lambda_default
         pinned_no_decay = self.settings.recall_pinned_no_decay
+        hit_boost_enabled = bool(self.settings.recall_hit_boost_enabled)
+        hit_boost_alpha = self.settings.recall_hit_boost_alpha
+        hit_boost_cap = self.settings.recall_hit_boost_cap
+        max_half_life_days = self.settings.recall_max_half_life_days
+        base_normalize = bool(self.settings.recall_rank_base_normalize)
         gate_mode = (self.settings.recall_gate_mode or "relevance").strip().lower()
         tokens = _tokenize(query)
         query_vec = self.embedding.embed([query])[0]
@@ -345,11 +382,19 @@ class MemoryService:
             )
 
         for mid, row in row_map.items():
+            boost_f = stability_boost(
+                row.access_count, alpha=hit_boost_alpha, cap=hit_boost_cap
+            ) if hit_boost_enabled else 1.0
             decay = decay_lambda_for(
                 pinned=row.pinned,
                 row_lambda=row.decay_lambda,
                 default_lambda=lam,
                 pinned_no_decay=pinned_no_decay,
+                access_count=row.access_count,
+                boost_enabled=hit_boost_enabled,
+                boost_alpha=hit_boost_alpha,
+                boost_cap=hit_boost_cap,
+                max_half_life_days=max_half_life_days,
             )
             base = effective_score(
                 importance=row.importance,
@@ -373,6 +418,8 @@ class MemoryService:
                 lexical=lex,
                 vector_sim=sim,
                 base=base,
+                hit_boost=boost_f,
+                decay_lambda_eff=decay,
             )
 
         # Also include pinned L2 not returned by vector top list
@@ -382,11 +429,19 @@ class MemoryService:
             ):
                 if row.id in by_id:
                     continue
+                boost_f = stability_boost(
+                    row.access_count, alpha=hit_boost_alpha, cap=hit_boost_cap
+                ) if hit_boost_enabled else 1.0
                 decay = decay_lambda_for(
                     pinned=row.pinned,
                     row_lambda=row.decay_lambda,
                     default_lambda=lam,
                     pinned_no_decay=pinned_no_decay,
+                    access_count=row.access_count,
+                    boost_enabled=hit_boost_enabled,
+                    boost_alpha=hit_boost_alpha,
+                    boost_cap=hit_boost_cap,
+                    max_half_life_days=max_half_life_days,
                 )
                 base = effective_score(
                     importance=row.importance,
@@ -409,21 +464,25 @@ class MemoryService:
                     lexical=lex,
                     vector_sim=sim,
                     base=base,
+                    hit_boost=boost_f,
+                    decay_lambda_eff=decay,
                 )
 
         # L1 session items (on-the-fly embedding)
         if session_id:
             for item in self.cache.list(session_id):
+                # L1 会话条目没有 access_count → 不参与命中增稳（boost 恒为 1.0）
+                decay = decay_lambda_for(
+                    pinned=item.pinned,
+                    row_lambda=None,
+                    default_lambda=lam,
+                    pinned_no_decay=pinned_no_decay,
+                )
                 base = effective_score(
                     importance=item.importance,
                     weight=item.weight,
                     created_at=item.created_at,
-                    decay_lambda=decay_lambda_for(
-                        pinned=item.pinned,
-                        row_lambda=None,
-                        default_lambda=lam,
-                        pinned_no_decay=pinned_no_decay,
-                    ),
+                    decay_lambda=decay,
                     now=now,
                 )
                 sim = _clamp01(cosine(query_vec, self.embedding.embed([item.content])[0]))
@@ -444,6 +503,7 @@ class MemoryService:
                     lexical=lex,
                     vector_sim=sim,
                     base=base,
+                    decay_lambda_eff=decay,
                 )
 
         boost = self.settings.recall_pinned_score_boost
@@ -489,15 +549,29 @@ class MemoryService:
             candidates = [c for c in candidates if not c.pinned]
         if gate_mode == "relevance":
             # 二段重排：relevance 主导 + base 小幅加权。时间/重要度只影响名次，不再决定生死。
+            # base 是 0.02~0.1 量纲，直接乘权重会低 relevance 两个数量级（等于没参与排序），
+            # 故在候选集内相对归一化后加权：base 项铺满 [0, base_w]，且永远压不过 relevance。
             base_w = self.settings.recall_rank_base_weight
-            candidates.sort(
-                key=lambda x: (
+            if base_normalize and candidates:
+                bmax = max(max(c.base, 0.0) for c in candidates)
+                if bmax <= 0:
+                    bmax = 1.0
+            else:
+                bmax = 1.0
+
+            def _rank_key(x: RecallItem) -> float:
+                b = max(x.base, 0.0)
+                if base_normalize:
+                    b = min(b / bmax, 1.0)
+                else:
+                    b = min(b, 1.0)
+                return (
                     x.relevance
-                    + base_w * min(max(x.base, 0.0), 1.0)
+                    + base_w * b
                     + (boost if x.pinned and include_pinned else 0.0)
-                ),
-                reverse=True,
-            )
+                )
+
+            candidates.sort(key=_rank_key, reverse=True)
         else:
             candidates.sort(
                 key=lambda x: x.score + (boost if x.pinned and include_pinned else 0.0),

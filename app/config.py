@@ -40,6 +40,17 @@ class Settings(BaseSettings):
     recall_rel_min_no_lexical: float = 0.55  # 零词法重叠（更严，挡纯向量蹭分）
     # 二段重排：rel 主导、base 小幅加权，否则又长又 pinned 的记忆会压过更相关的短记忆。
     recall_rank_base_weight: float = 0.2
+    # base 在候选集内相对归一化（base / max(base)）。不归一化的话 base 是 0.02~0.1 量纲，
+    # 乘以 0.2 后比 relevance（0~1）低两个数量级 —— base 项等于不存在。关掉=回到旧行为。
+    recall_rank_base_normalize: bool = True
+    # 命中增稳（间隔重复的轻量版）：被召回过的记忆衰减变慢，越用越抗忘。
+    #   boost = min(1 + alpha·ln(1+access_count), cap)，lambda_eff = lambda / boost
+    # 只影响排序（门禁已与年龄解耦，见 ADR 0010/0011），关掉=回到固定半衰期。
+    recall_hit_boost_enabled: bool = True
+    recall_hit_boost_alpha: float = 0.35
+    recall_hit_boost_cap: float = 3.0
+    # 硬护栏：任何记忆的有效半衰期不得超过该天数（防「永生条目」）
+    recall_max_half_life_days: float = 365.0
     # 词法信号的长度折扣：内容超过该字数后，命中一个词的证据强度按长度线性衰减。
     # 不折扣的话，几千字的「大杂烩」记忆会与几乎所有查询产生词法重叠，绕过词法门禁。
     recall_lexical_len_norm: int = 300

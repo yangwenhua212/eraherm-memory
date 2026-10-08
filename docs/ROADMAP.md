@@ -193,6 +193,7 @@ memory.evolve()     # 纠正即进化（新事实压过旧版）
 | `AgentMemory` 五能力封装（learn/remember/reflect/recall/evolve） | 已实现 |
 | `fastembed` + `recall_min_score` | 已实现（见 CHANGELOG Unreleased / 待收 0.9.0） |
 | **召回门禁改判相关性（ADR 0010，2026-10-08）** | 已实现：绝对分门禁 + `exp(-λ·age)` 会让 `age > 28d` 的记忆永远召不回（线上表现为全库召回为空）。门禁改判 `relevance`（0.18 / 零词法 0.55），pinned 不参与衰减，排序改相关性主导，长文词法按长度二次折扣；`recall_gate_mode=score` 可回滚。回归 `tests/test_recall_gate_age_decoupled.py` |
+| **命中增稳 + base 归一化（ADR 0011，2026-10-08）** | 已实现：`access_count` 从「只写不读」变为有效信号——`boost = min(1+0.35·ln(1+n), 3.0)`、`lambda_eff = lambda/boost`（命中 10 次半衰期 13.9→25.5 天），`recall_max_half_life_days=365` 护栏；排序里 base 改为候选集内归一化（原来是 0.02~0.1 量纲、等于没参与排序）。两个开关可逐位回滚。回归 `tests/test_recall_hit_boost.py` |
 | **主动感知看门狗（phase 9）** | 已实现：`POST /v1/admin/watchdog` 巡检（倒计时/被遗忘宝石/健康信号），零 LLM；敏感记忆（秘密/红线）绝不推送；Host 侧 cron 每 6h 巡检、有料才推飞书（`~/.hermes/scripts/eraherm-watchdog.sh`） |
 | **LLM 图谱抽取/反射（生产启用）** | 已实现：`ERAHERM_LLM_BACKEND=openai`（DeepSeek `deepseek-chat`）。规则抽不出的人物/事实关系（「用户 related_to 合作方」）由 LLM 抽取；纠正反射走 LLM 分析。**敏感内容防护**：含 秘密/红线/不要告诉 等词的输入自动拦截走本地，绝不出网（`app/sensitive.py`，词表与 watchdog 共用） |
 
@@ -201,7 +202,11 @@ memory.evolve()     # 纠正即进化（新事实压过旧版）
 | 触发条件 | 动作 |
 |----------|------|
 | 多实例 + 可靠异步 | JobQueue → ARQ/Redis；Consolidation → Celery Beat |
-| L3 多机 | ArchiveStore → S3 |
+| 多机 L3 归档 | ArchiveStore → S3 |
+| 命中增稳出现「通胀」（被无关查询捞出的记忆也在攒 boost） | 新增 `hit_count` 列：只在 `relevance ≥ recall_hit_boost_min_rel`（默认 0.35）时 +1，boost 改用 `hit_count`（需一次 schema 迁移，见 ADR 0011） |
+| **单用户活跃记忆 ≥ 50 条，且某主题下 ≥ 3 条事实可合并** | 归纳型偏好提炼：`app/consolidate/service.py` 在 compress 之后加一个 phase，产出 `memory_type="insight"`；**必须**带 `related_memory_ids` + `confidence`（< 0.7 不写）；只增不删；单次最多新增 3 条；写库前过 `llm_sensitive_guard`；API 可列出/可删（可人工审）。防「看着合理但没根据」的洞察污染排序 |
+| **`feedback_events` ≥ 2000 条且覆盖 ≥ 30 天** | 记忆评分的**在线学习**：先做多臂老虎机式的 `weight` 更新（按「召回后被采纳/被纠正」调），**不是 RL**（样本量决定，术语别混） |
+| 夜间重播加固 | 观察项：命中增稳已覆盖大半价值，先看 access 分布再决定要不要做 |
 | 主库并发 | MemoryRepo → Postgres |
 | 冲突判定要更准 | ✅ 已做：LLM 冲突判定 Adapter（`llm_reflection.py`，生产已启用，敏感内容自动回落 heuristic） |
 | MCP 远程共享 | Streamable HTTP transport |

@@ -15,10 +15,13 @@
 
 - **二段重排：排序由相关性主导**。排序键从 `score`（=base×rel）改为 `relevance + 0.2×base + pinned_boost`，否则又长又 pinned 的记忆会压过更相关的短记忆（实测：更相关的短记忆被那条又长又 pinned 的定案记忆挤到第二）
 - `recall_gate_mode` 新增（默认 `relevance`）。旧绝对分门禁保留为 `recall_gate_mode=score` 回滚开关；旧配置 `recall_min_score` / `recall_min_score_no_lexical` 在 `relevance` 模式下按 `rel = (score-0.15)/0.85` 换算，严格度语义不变；`min_score<=0` 仍表示关闭门禁
+- **排序键 base 项改为候选集内相对归一化**（`recall_rank_base_normalize=true`）：`base` 是 0.02~0.1 量纲，原来乘 0.2 后比 relevance 低两个数量级、等于没参与排序。归一化后 base 项铺满 `[0, 0.2]`，只做破平、永不压过相关性（见 [ADR 0011](docs/adr/0011-hit-boost-and-base-normalization.md)）
+- **命中增稳**（`recall_hit_boost_enabled=true`）：`boost = min(1 + 0.35·ln(1+access_count), 3.0)`，`lambda_eff = lambda / boost`。被召回过的记忆衰减变慢（命中 10 次半衰期 13.9 天 → 25.5 天），`pinned` 仍在 boost 之前短路，另有 `recall_max_half_life_days=365` 硬护栏防「永生条目」。`access_count` 从「只写不读」变为有效信号
 
 ### Added
 
 - `/v1/recall` 响应项新增诊断字段 `relevance` / `lexical` / `vector_sim` / `base`（排查「为什么这条召回不到」不必在客户端重算）
+- `/v1/recall` 响应项新增诊断字段 `hit_boost` / `decay_lambda_eff`（命中增稳的可见性：这条记忆当前的稳定性倍数与实际衰减系数）。回归测试 `tests/test_recall_hit_boost.py`（10 例：单调性/有界性/开关等价/半衰期护栏/常用者排前/相关性仍压过 base）
 - 主动感知看门狗（phase 9）：`POST /v1/admin/watchdog` 巡检记忆库，产出「值得说的事」——倒计时事件（D-7/D-3/D-1/当天）、被遗忘的高价值记忆（importance≥0.8 且从未被 recall）、健康信号。**零 LLM / 零外部 API**（SQLite + 正则 + 标准库）。敏感记忆（秘密/红线类）绝不进入推送。回归测试 `tests/test_watchdog.py`（5 例）
 - 生产启用 LLM 图谱抽取/反射（`ERAHERM_LLM_BACKEND=openai`，DeepSeek `deepseek-chat`）：规则抽取器抽不出的人物/事实关系（「用户 related_to 合作方」）现在由 LLM 抽取，图谱支柱真正兑现
 - **敏感内容防护**（`app/sensitive.py`）：LLM 抽取/反射的输入命中敏感词（秘密/红线/不要告诉/不能提 等）→ 直接走本地规则/heuristic，**内容绝不出网**。watchdog 的敏感推送过滤改复用同一词表（一份定义，三处生效）。回归测试 `tests/test_llm_sensitive_guard.py`（10 例）

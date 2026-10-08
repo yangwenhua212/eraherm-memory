@@ -260,6 +260,8 @@ def recall(body: RecallRequest, request: Request) -> RecallResponse:
                 lexical=i.lexical,
                 vector_sim=i.vector_sim,
                 base=i.base,
+                hit_boost=i.hit_boost,
+                decay_lambda_eff=i.decay_lambda_eff,
             )
             for i in items
         ],

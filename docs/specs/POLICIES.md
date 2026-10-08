@@ -19,6 +19,11 @@
 | `recall_rel_min_no_lexical` | `0.55` | 零词法重叠时的更高相关性门禁（压制纯向量蹭分） |
 | `recall_pinned_no_decay` | `true` | pinned（核心记忆）不参与年龄衰减——兑现「pinned 永不为衰减」 |
 | `recall_rank_base_weight` | `0.2` | 二段重排里 base 的权重（相关性主导排序） |
+| `recall_rank_base_normalize` | `true` | base 在候选集内相对归一化（`base/max(base)`）。不归一化时 base 是 0.02~0.1 量纲，乘 0.2 后等于没参与排序（[ADR 0011](../adr/0011-hit-boost-and-base-normalization.md)） |
+| `recall_hit_boost_enabled` | `true` | 命中增稳：被召回过的记忆衰减变慢（间隔重复的轻量版） |
+| `recall_hit_boost_alpha` | `0.35` | 增稳系数：`boost = min(1 + alpha·ln(1+access_count), cap)` |
+| `recall_hit_boost_cap` | `3.0` | 增稳上限（半衰期最多 ×3，即默认下 ≤41.6 天） |
+| `recall_max_half_life_days` | `365` | 硬护栏：任何记忆的有效半衰期不得超过该天数（防「永生条目」） |
 | `recall_lexical_len_norm` | `300` | 词法信号长度折扣阈值：超长内容的零星命中按长度二次折减（防「大杂烩」绕过门禁） |
 | `recall_pinned_score_boost` | `0.05` | 钉死仅作排序加权，**不再无条件置顶** |
 | `extract_on_remember` | `true` | 写入时是否抽图 |

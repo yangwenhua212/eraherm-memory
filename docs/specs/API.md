@@ -140,6 +140,8 @@ Remember：写入一条内容（先进 L1；符合策略则写 L2）。
 ```
 
 > 门禁判**相关性**而不是绝对分（见 [ADR 0010](../adr/0010-recall-gate-relevance.md)）：`ERAHERM_RECALL_REL_MIN`（有词法重叠，默认 `0.18`）/ `ERAHERM_RECALL_REL_MIN_NO_LEXICAL`（零词法，默认 `0.55`）。请求参数 `min_score` 会抬高有词法档的门槛，传 `0` 关闭门禁。
+>
+> 排序（见 [ADR 0011](../adr/0011-hit-boost-and-base-normalization.md)）：`relevance + 0.2×(base/max(base)) + pinned_boost`——相关性主导，`base`（重要度 × 衰减 × 反馈权重）只做破平。响应的 `hit_boost` 是被召回次数带来的稳定性倍数（命中 0 次 = 1.0，上限 `ERAHERM_RECALL_HIT_BOOST_CAP`，默认 3.0），`decay_lambda_eff` 是应用增稳与半衰期护栏后的实际衰减系数（`pinned` 恒为 `0`）。
 
 响应：`200`
 
@@ -156,7 +158,9 @@ Remember：写入一条内容（先进 L1；符合策略则写 L2）。
       "relevance": 0.77,
       "lexical": 0.5,
       "vector_sim": 0.88,
-      "base": 1.0
+      "base": 1.0,
+      "hit_boost": 1.84,
+      "decay_lambda_eff": 0.027
     }
   ],
   "recommendations": [

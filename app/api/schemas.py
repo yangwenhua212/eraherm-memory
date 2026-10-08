@@ -120,6 +120,10 @@ class RecallItemResponse(BaseModel):
     lexical: float = 0.0
     vector_sim: float = 0.0
     base: float = 0.0
+    # 命中增稳（2026-10-08 加，ADR 0011）：hit_boost 是被召回次数带来的稳定性倍数，
+    # decay_lambda_eff 是应用增稳与半衰期护栏后的实际衰减系数（pinned 恒为 0）。
+    hit_boost: float = 1.0
+    decay_lambda_eff: float = 0.0
 
 
 class RecallResponse(BaseModel):
