@@ -19,23 +19,28 @@
 
 ---
 
-## 2. mcp.json：把绝对路径改成占位说明
+## 2. mcp.json：把绝对路径改成占位说明 ✅ 已完成（0.10.2）
 
 **标签：** `documentation` `good first issue`
 
-**任务：** 根目录 [`mcp.json`](../../mcp.json) 里的 `cwd` 仍是本机绝对路径。改成注释/文档说明「请改成你的 clone 路径」，并在 [docs/MCP.md](../MCP.md) 加一句警告。
+**已完成：** 根目录 [`mcp.json`](../../mcp.json) 的 `cwd` 已改为占位值
+`D:/path/to/eraherm-memory`，并移除了原先泄漏的本机路径；
+[docs/MCP.md](../MCP.md) 也加了「必须改成你自己的 clone 路径」的警告。
 
-**验收：** 新人复制配置后知道必须改 `cwd`，不会直接连到 `D:/bk/agent`。
+**验收：** 新人复制配置后知道必须改 `cwd`。
 
 ---
 
-## 3. evals：加一条「无关查询应为空」case
+## 3. evals：加一条「无关查询应为空」case ✅ 已完成（0.10.2）
 
 **标签：** `good first issue` `help wanted`
 
-**任务：** 在 [`evals/cases.json`](../../evals/cases.json) 增加用例：用户有一条数据库事实，查询「今晚吃啥」，期望 `items` 为空或至少不含该事实（与 `ERAHERM_RECALL_MIN_SCORE` 行为一致）。必要时扩展 harness 支持 `expect_empty` / `expect_none_contains`。
+**已完成：** [`evals/cases.json`](../../evals/cases.json) 已有两条负例
+（`no_hard_pull_on_unrelated_query_identity` / `..._project`），
+harness 也支持了 `expect_empty`、`expect_top1_contains`、`expect_max_items`
+与 `recall@k`/`MRR`/p50/p95 指标。
 
-**验收：** `python -m evals.harness` 全绿。
+**验收：** `python -m evals.harness` 全绿 —— 已满足（16/16）。
 
 ---
 

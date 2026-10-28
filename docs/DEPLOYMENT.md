@@ -30,7 +30,12 @@ ERAHERM_VECTOR_BACKEND=sqlite
 ERAHERM_GRAPH_BACKEND=networkx
 ERAHERM_EMBEDDING_BACKEND=hashing
 ERAHERM_FEEDBACK_ASYNC=false
-ERAHERM_ADMIN_TOKEN=dev-admin-token
+# 默认只绑回环、不启用认证（本机安全）。
+# 要对外提供服务：ERAHERM_HOST=0.0.0.0 必须同时配 ERAHERM_API_TOKEN，否则拒绝启动。
+ERAHERM_HOST=127.0.0.1
+# admin 端点默认关闭（未配置即 503，不再有可猜的默认口令）。
+# 需要 consolidate / watchdog / reembed / l3 时再设一个真实密钥：
+# ERAHERM_ADMIN_TOKEN=
 ```
 
 ### 生产 / Hermes（Embedding 写死，先改这一项）

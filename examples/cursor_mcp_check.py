@@ -7,6 +7,7 @@
 """
 import asyncio
 import json
+import sys
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
@@ -18,7 +19,9 @@ def _text(result) -> str:
 
 async def main() -> None:
     params = StdioServerParameters(
-        command="/home/admin/eraherm-memory/.venv/bin/python",
+        # 用当前解释器而不是硬编码的绝对路径：原先写死了某台机器上的 venv 解释器，
+        # 既泄漏了本机信息，换个环境也必然跑不起来。
+        command=sys.executable,
         args=["eraherm_mcp_server.py"],
         env={"ERAHERM_API_URL": "http://127.0.0.1:8000", "ERAHERM_USER_ID": "cursor_demo"},
     )

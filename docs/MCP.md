@@ -30,13 +30,16 @@ Host（Claude Desktop / Cursor）会以子进程方式拉起该命令，无需�
 
 仓库根目录 `mcp.json` 示例：
 
+> ⚠️ **`cwd` 必须改成你自己的 clone 路径**。仓库里给的是占位值
+> `D:/path/to/eraherm-memory`，直接用会启动失败（目录不存在）。
+
 ```json
 {
   "mcpServers": {
     "eraherm-memory": {
       "command": "python",
       "args": ["-m", "app.mcp_server"],
-      "cwd": "D:/bk/agent",
+      "cwd": "D:/path/to/eraherm-memory",
       "env": {
         "ERAHERM_DATABASE_URL": "sqlite:///./storage/eraherm.db",
         "ERAHERM_EMBEDDING_BACKEND": "hashing",

@@ -3,7 +3,7 @@
     "eraherm-memory": {
       "command": "python",
       "args": ["-m", "app.mcp_server"],
-      "cwd": "D:/bk/agent",
+      "cwd": "D:/path/to/eraherm-memory",
       "env": {
         "ERAHERM_DATABASE_URL": "sqlite:///./storage/eraherm.db",
         "ERAHERM_EMBEDDING_BACKEND": "hashing",
