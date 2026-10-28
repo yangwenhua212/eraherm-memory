@@ -50,7 +50,8 @@
 |----|------|------|
 | `max_hops_default` | `2` | impact 默认跳数 |
 | `min_extract_confidence` | `0.5` | 低于此不落边 |
-| `merge_entities_by_alias` | `true` | 别名合并到规范实体 |
+| `max_paths` | `200` | impact 路径枚举上限（防组合爆炸；`ERAHERM_GRAPH_MAX_PATHS`） |
+| ~~`merge_entities_by_alias`~~ | — | ⚠️ **尚未实现**。`EntityRow.aliases_json` 列存在、`find_entity` 会读它，但没有任何自动别名/共指合并逻辑。已从本表移除默认值声称 |
 
 ---
 

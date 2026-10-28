@@ -98,10 +98,11 @@ uvicorn app.main:app --reload --port 8000
 
 | Tool | 干什么 |
 |------|--------|
-| `remember` | 存长期事实 |
+| `remember` | 存长期事实（返回 `persisted`，为 false 时说明为什么没落库） |
 | `recall` | 语义召回 |
 | `impact` | 「改 X 会影响谁」 |
-| `consolidate` | 整理压缩（运维向） |
+| `consolidate` | 整理压缩（运维向，需 `ERAHERM_ADMIN_TOKEN`） |
+| `health` | 健康检查 |
 
 完整说明：[docs/MCP.md](docs/MCP.md)。
 
@@ -166,10 +167,13 @@ ERAHERM_RECALL_MIN_SCORE=0.25
 | 支柱 | 解决什么 |
 |------|----------|
 | **分层记忆 L1/L2/L3** | 会话热数据 / 长期事实 / 冷归档，关键钉死不丢 |
-| **轻量知识图谱** | 结构推理：「改 A 会影响谁」。实体/关系自动抽取：技术关系走本地规则，人物/事实关系走 LLM（`ERAHERM_LLM_BACKEND=openai`），敏感内容自动拦截不出网 |
+| **轻量知识图谱** | 结构推理：「改 A 会影响谁」。实体/关系自动抽取：技术关系走本地规则，人物/事实关系走 LLM（`ERAHERM_LLM_BACKEND=openai`）。LLM 抽取/反射的输入命中中文敏感词表（`app/sensitive.py`）时回落本地规则 —— 注意这是**词表匹配，不是可靠的防泄漏边界**；`openai` embedding 路径仍会把正文发给外部 API，真敏感内容请用本地 embedding |
 | **反馈闭环** | 点赞 / 点踩 / **纠正** → Reflection → 写回并优先 |
 
-当前版本 **0.10.1**：MCP、整理压缩、`eraherm-reembed`、Hermes 内置 Tools、召回假阳性/多 pinned 修复。详见 [CHANGELOG](CHANGELOG.md)、[ROADMAP](docs/ROADMAP.md)。
+当前版本 **0.10.2（未发布）**：MCP、整理压缩、`eraherm-reembed`、Hermes 内置 Tools、召回假阳性/多 pinned 修复，
+**安全加固**（HTTP 面认证、默认只绑回环、admin 端点 fail-closed、敏感内容不走远端 embedding），
+**「纠正即进化」升级为取代链**（旧事实让路但不删除），整理获得 dry-run / 删除前归档 / 恢复接口 / 跨进程锁。
+详见 [CHANGELOG](CHANGELOG.md)、[ROADMAP](docs/ROADMAP.md)、[ADR 0012](docs/adr/0012-api-auth-and-exposure-guard.md)、[0013](docs/adr/0013-supersede-chain-and-relation-validity.md)、[0014](docs/adr/0014-sensitive-content-remote-embedding.md)。
 
 想贡献？请读 [CONTRIBUTING.md](CONTRIBUTING.md)，Issues 筛选标签 **`good first issue`**。
 
@@ -197,19 +201,48 @@ with MemoryClient("http://127.0.0.1:8000") as client:
 - 示例：`python examples/hermes_builtin_tools.py`  
 - 纠正闭环自测：`python examples/correct_to_evolve.py`  
 - 换 embedding 后重建向量：`eraherm-reembed --orphan-user-id <uid>`（[DEPLOYMENT.md §3.1](docs/DEPLOYMENT.md)）  
-- 评测：`python -m evals.harness` · 测试：`python -m pytest -q`
+- 评测：`python -m evals.harness`（`--strict` 加延迟预算）· 离线门禁校验：`python scripts/check_eval_gates.py`（不需要 sqlmodel）  
+- 测试：`python -m pytest -q`
+
+### 认证与暴露面（0.10.2 起）
+
+默认只绑定 `127.0.0.1`，本机可用、零配置。**要对外提供服务，必须显式选一条路**：
+
+```bash
+# 1) 生成一个密钥
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+
+# 2) 写进 .env
+ERAHERM_HOST=0.0.0.0
+ERAHERM_API_TOKEN=<上面生成的串>
+```
+
+此后 `/v1/*` 除 `/v1/health` 外都要求 `X-API-Token: <token>`（或 `Authorization: Bearer <token>`）。
+`/v1/admin/*` 另需 `X-Admin-Token`（`ERAHERM_ADMIN_TOKEN`）；**未配置时 admin 端点返回 503**，
+不再有可猜的默认口令。
+
+> **没有 token 却绑定非回环地址时，进程会拒绝启动**（fail-fast）。确实需要无认证暴露
+> —— 例如已有前置网关做鉴权 —— 用 `ERAHERM_ALLOW_INSECURE_PUBLIC=true` 显式承认。
+> 另外注意：`ERAHERM_API_TOKEN` 是**单租户共享密钥**，它不区分 `user_id`，
+> 多租户隔离仍未实现。详见 [ADR 0012](docs/adr/0012-api-auth-and-exposure-guard.md)。
 
 ### 生产配置要点
 
 | 配置 | 开发默认 | 生产 / Hermes |
 |------|----------|----------------|
+| `ERAHERM_HOST` | `127.0.0.1` | `0.0.0.0` **并配 `ERAHERM_API_TOKEN`**，否则启动失败 |
+| `ERAHERM_API_TOKEN` | 空 | **必配**（公开绑定）；`/v1/*` 除 health 外都要带 |
+| `ERAHERM_ADMIN_TOKEN` | 空（admin 端点 503） | 需要 consolidate / watchdog / reembed / l3 时必配 |
 | `ERAHERM_EMBEDDING_BACKEND` | `hashing` | **`fastembed` 或 `openai`** |
-| `ERAHERM_RECALL_MIN_SCORE` | `0.25` | 可调 `0.3~0.4`；`0` 关闭 |
-| `ERAHERM_RECALL_MIN_SCORE_NO_LEXICAL` | `0.38` | 零词法命中时的更高门槛 |
+| `ERAHERM_RECALL_REL_MIN` | `0.18` | 门禁主旋钮（判**相关性**）；调高更严 |
+| `ERAHERM_RECALL_REL_MIN_NO_LEXICAL` | `0.55` | 零词法命中的更严门槛 |
+| `ERAHERM_RECALL_MIN_SCORE` / `..._NO_LEXICAL` | `0.25` / `0.38` | **旧绝对分旋钮**，按比例折算到相关性；建议改用上面两个 |
 | `ERAHERM_CORRECT_CREATES_PINNED` | `true` | `false` 纠正不钉死 |
-| 会话 / 向量 / 图 | memory / sqlite / networkx | 按需 Redis / Qdrant / Neo4j |
+| `ERAHERM_ENABLE_DEMO` | `true` | 生产建议 `false`（别让 API 进程兼当静态站点） |
+| 会话 / 向量 / 图 | memory / sqlite / networkx | 按需 Redis / Qdrant / Neo4j（多 worker 仅上 Redis **不够**，主库仍是单文件 SQLite） |
 
 完整对照：[DEPLOYMENT.md](docs/DEPLOYMENT.md)。
+遗留问题清单（哪些已修、哪些还开着）：[KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md)。
 
 ---
 
@@ -221,6 +254,7 @@ with MemoryClient("http://127.0.0.1:8000") as client:
 | **为什么这样选** | [ADR 索引](docs/adr/README.md) |
 | MCP / Hermes / 部署 | [MCP](docs/MCP.md) · [Hermes](docs/HERMES_INTEGRATION.md) · [部署](docs/DEPLOYMENT.md) |
 | 契约与扩展 | [API](docs/specs/API.md) · [数据模型](docs/specs/DATA_MODEL.md) · [扩展](docs/specs/EXTENSION.md) · [政策](docs/specs/POLICIES.md) |
+| **已知短板 / 遗留项** | [KNOWN_ISSUES](docs/KNOWN_ISSUES.md) |
 | 参与与许可 | [CONTRIBUTING](CONTRIBUTING.md) · [Good First Issues 草稿](docs/community/GOOD_FIRST_ISSUES.md) · [SECURITY](SECURITY.md) |
 
 ---

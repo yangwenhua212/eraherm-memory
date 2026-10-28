@@ -1,7 +1,8 @@
 # API 规范
 
 > 状态：Draft v0.1  
-> 风格：REST + JSON；前缀 `/v1`；时间 UTC。
+> 风格：REST + JSON；前缀 `/v1`；时间 UTC。  
+> 认证（0.10.2 起）：见 [ADR 0012](../adr/0012-api-auth-and-exposure-guard.md)。
 
 ---
 
@@ -12,14 +13,20 @@
 | Base URL | `/v1` |
 | Content-Type | `application/json` |
 | 错误 | `{ "error": { "code": "...", "message": "...", "details": {} } }` |
-| 幂等 | 写操作可带 `Idempotency-Key`（后续实现） |
-| 隔离 | Header 或 body 传 `X-User-Id` / `user_id`；`tenant_id` 可选 |
+| 认证 | 配置了 `ERAHERM_API_TOKEN` 时，除 `GET /v1/health` 外所有路由都要带 `X-API-Token`（或 `Authorization: Bearer`），否则 **401**。见 [ADR 0012](../adr/0012-api-auth-and-exposure-guard.md) |
+| 管理 | `/v1/admin/*` 另需 `X-Admin-Token`（值 = `ERAHERM_ADMIN_TOKEN`）。**未配置该环境变量时一律 503**（fail-closed） |
+| 限流 | 进程内令牌桶（默认 600/min，burst 120，`/v1/health` 豁免）。超限返回 **429** + `Retry-After`。多 worker 各自计数，是「防误用」而非分布式限流 |
+| 幂等 | 写操作可带 `Idempotency-Key`（**尚未实现**） |
+| 隔离 | Header 或 body 传 `X-User-Id` / `user_id`；`tenant_id` 可选。⚠️ **仅 `X-User-Id` 自报，不是鉴权**：拿到 API token 的客户端仍可指定任意 `user_id`（单租户语义） |
 
-公共 Header（建议）：
+公共 Header：
 
 - `X-Request-Id`
-- `X-User-Id`
+- `X-API-Token`（配置了 API token 时必需）
+- `X-User-Id`（仅 `POST /v1/sessions`、`POST /v1/memories`、`POST /v1/memories/pin` 读取；其余端点忽略它）
 - `X-Tenant-Id`（可选）
+
+> 响应会回带 `X-Request-Id`。
 
 ---
 
@@ -90,6 +97,8 @@ Remember：写入一条内容（先进 L1；符合策略则写 L2）。
   "pinned": false,
   "entities_extracted": 2,
   "relations_extracted": 1,
+  "persisted": true,
+  "drop_reason": null,
   "alerts": [
     {
       "type": "tech_stack_shift",
@@ -102,6 +111,16 @@ Remember：写入一条内容（先进 L1；符合策略则写 L2）。
 ```
 
 `alerts` 默认可为空数组；Host 决定是否弹窗。可用 `ERAHERM_PROACTIVE_ALERTS_ENABLED=false` 关闭。
+
+> **`persisted` / `drop_reason`（0.10.2 新增）**：`importance < ERAHERM_PROMOTION_IMPORTANCE_THRESHOLD`
+> 且没传 `session_id` 时，这条记忆**不会落库**——以前 API 依然返回 201 + 一个查不到的 id。
+> 现在显式返回 `persisted: false` 并给出 `drop_reason`。想要必定落库：传 `session_id`、
+> 提高 `importance`、或 `pinned: true`。
+>
+> `memory_type` 必须是 `fact` / `preference` / `identity` / `episode` / `negative` / `reflection`
+> 之一（其它值返回 422）。未知类型会落到 importance 兜底基线 0.5（< 0.6），
+> 正是上面那条静默丢弃最常见的触发方式。
+
 ### `POST /v1/memories/pin`
 
 将已有记忆钉死（或直接写入钉死记忆）。
@@ -134,8 +153,7 @@ Remember：写入一条内容（先进 L1；符合策略则写 L2）。
   "session_id": "sess_...",
   "query": "EraHerm 用什么技术栈",
   "top_k": 8,
-  "include_pinned": true,
-  "expand_graph": false
+  "include_pinned": true
 }
 ```
 
@@ -277,8 +295,10 @@ Remember：写入一条内容（先进 L1；符合策略则写 L2）。
 
 ### `GET /v1/health`
 
+**唯一免认证的端点**（探针用）。`Accept: text/html` 时返回一个极简 HTML 页，否则 JSON：
+
 ```json
-{ "status": "ok", "version": "0.1.0" }
+{ "status": "ok", "version": "0.10.2" }
 ```
 
 ### `POST /v1/admin/consolidate`
@@ -286,17 +306,33 @@ Remember：写入一条内容（先进 L1；符合策略则写 L2）。
 触发记忆整理（重排 / 压缩 / 冲突淘汰 / 低权重遗忘）。需 `X-Admin-Token` 头（值 = `ERAHERM_ADMIN_TOKEN`）。
 
 ```bash
+# 先看会动什么（不落库）
 curl -X POST http://127.0.0.1:8000/v1/admin/consolidate \
   -H "Content-Type: application/json" \
   -H "X-Admin-Token: $ERAHERM_ADMIN_TOKEN" \
-  -d '{"user_id": "u_123"}'
+  -d '{"user_id": "u_123", "dry_run": true}'
 ```
 
 ```json
-{ "user_id": "u_123" }
+{ "user_id": "u_123", "dry_run": false }
 ```
 
-`user_id` 省略则对所有用户执行。
+`user_id` 省略则对所有用户执行（走跨进程文件锁：多 worker 时只有一个进程真正跑）。
+响应每项含 `dry_run` / `skipped_reason` / `archive_id`（删除前自动归档的 id）。
+
+> ⚠️ 整理是**破坏性**的。三道安全网：`dry_run`、删除前自动 L3 归档
+> （`ERAHERM_CONSOLIDATION_ARCHIVE_BEFORE_DELETE`，归档失败即放弃删除）、
+> 以及下面两个恢复端点。
+
+### `POST /v1/admin/memories/restore`
+
+恢复被软删的记忆（整理误判的兜底出口）。二选一：显式 `memory_ids`，或
+`user_id` + `limit`（恢复该用户最近删除的若干条）。恢复后会自动重建向量。
+
+### `POST /v1/admin/l3/restore`
+
+从 L3 归档 JSON 恢复记忆：`{"archive_id": "l3_..."}`。只补缺失的 id，不覆盖已存在的行；
+返回 `restored_memories` / `skipped_existing` / `reembedded` / `errors`。
 
 ### `POST /v1/admin/watchdog`
 
@@ -331,25 +367,59 @@ curl -X POST http://127.0.0.1:8000/v1/admin/watchdog \
 ```
 
 - `items` 为空 = 无事发生，Host（cron 脚本）应静默不打扰
-- 敏感记忆（含 秘密/红线/绝对不提 等词）**绝不进入 items**——主动推送 = 泄露，按此设计
+- 记忆内容命中敏感词表时**绝不进入 items**——主动推送 = 泄露。注意这只是中文**词表匹配**（`app/sensitive.py`），不是可靠的防泄漏边界
 - 信号类型：`countdown`（D-7/D-3/D-1/当天）、`forgotten_gems`（importance≥0.8 且从未被 recall）、`health`（低权重堆积）
 
 ### `POST /v1/admin/l3/dump`
 
-触发 L3 归档；需管理令牌。
+触发 L3 归档（把记忆/实体/关系导出成 JSON 落到 `storage/l3/`）。需 `X-Admin-Token`。
 
-MCP 工具封装见 [MCP.md](../MCP.md)。
+```bash
+curl -X POST http://127.0.0.1:8000/v1/admin/l3/dump \
+  -H "Content-Type: application/json" \
+  -H "X-Admin-Token: $ERAHERM_ADMIN_TOKEN" \
+  -d '{"user_id": "u_123"}'
+```
+
+`user_id` 省略则导出全库。响应含归档 id、文件绝对路径、sha256 校验和与各类计数。
+
+> ⚠️ **目前只有导出，没有恢复接口**——它不是备份方案，删掉的记忆（consolidate 的软删）
+> 无法通过它还原。
+
+### `GET /v1/admin/l3/archives`
+
+列出已有归档（`limit` 1~100，默认 20），按创建时间倒序。需 `X-Admin-Token`。
+
+### `POST /v1/admin/reembed`
+
+全量重建向量（换 embedding 后端 / 维度后必做）。需 `X-Admin-Token`。
+body：`user_id`、`orphan_policy`(`assign`|`skip`|`fail`)、`orphan_user_id`、`batch_size`(1~512)、
+`force`、`dry_run`、`cleanup_dangling`、`recreate_collection`。等价 CLI：`eraherm-reembed`。
+
+### `GET /v1/metrics`
+
+进程内计数器快照（`{"counters": {...}}`）。**不聚合多 worker、重启即清零**；无 Prometheus/OTel 导出。需要 API token（配置了的话）。
+
+### `GET /v1/feedback/{feedback_id}`
+
+查询某次反馈的异步 reflection 状态（`status` 为 `pending` 时表示还在跑）。需要 API token（配置了的话）。
 
 ---
 
-## 7. 错误码（初稿）
+## 7. 错误码
 
 | code | HTTP | 含义 |
 |------|------|------|
-| `validation_error` | 400 | 参数不合法 |
+| `validation_error` | 400 | 参数不合法（含：远端 embedding + 敏感内容被拒，见 [ADR 0014](../adr/0014-sensitive-content-remote-embedding.md)） |
+| `unauthorized` | 401 | API token 缺失/错误，或 admin token 错误 |
+| `forbidden` | 403 | 资源不属于该 `user_id`（pin 别人的记忆 / 关闭别人的会话） |
 | `not_found` | 404 | 资源不存在 |
 | `conflict` | 409 | 状态冲突（如重复关闭会话） |
+| `reembed_failed` | 400 | 重嵌请求本身失败（`details` 带报告） |
 | `llm_failed` | 502 | 抽取/反思上游失败 |
+| `rate_limited` | 429 | 触发限流，看 `Retry-After` |
+| `unavailable` | 503 | 能力未启用（如 consolidate/watchdog 服务缺失） |
+| `admin_disabled` | 503 | `ERAHERM_ADMIN_TOKEN` 未配置 → admin 端点整体关闭 |
 | `internal_error` | 500 | 未分类错误 |
 
 ---

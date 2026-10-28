@@ -2,6 +2,20 @@
 
 > 目标：长期迭代时，**换实现不换契约**。
 
+> ⚠️ **本文件当前滞后于代码（0.10.2 起已知）**：下面的目录清单和签名示例写的是规划名，
+> 与仓库实际文件不一致。以实际代码为准：
+>
+> | 本文写的 | 实际是 |
+> |---|---|
+> | `app/ports/llm_client.py` | 无此 Port；LLM 由 `app/adapters/openai_llm.py`（`complete_json`）+ `app/ports/reflection.py` 承担 |
+> | `app/ports/embedding_client.py` | `app/ports/embedding.py` |
+> | `app/ports/vector_store.py` | `app/ports/vector_store.py` ✅ |
+> | `app/ports/sqlite_vec_store.py` / `chroma_store.py` | `app/adapters/sqlite_vector_store.py`；**没有** Chroma 适配器 |
+> | `app/adapters/openai_compatible_*.py` | `app/adapters/openai_llm.py` / `openai_embedding.py` |
+> | `impact_paths(seed, max_hops, direction)` | 全是关键字参数：`impact_paths(*, user_id, seed_entity_id, max_hops, direction, tenant_id, max_paths)` |
+> | 「未来 Python SDK（规划）」 | 已实现并随包发布：`sdk/eraherm_memory/` |
+> | 「每个 Port 提供契约测试」 | 只覆盖了 `MemoryRepository` 与 `VectorStore`；其余 Port 无契约测试 |
+
 ---
 
 ## 1. Port / Adapter 模式
@@ -10,20 +24,20 @@
 
 ```text
 app/ports/
-  vector_store.py      # upsert / search / delete
+  vector_store.py      # upsert / search / delete / get_meta / list_memory_ids
   graph_store.py       # upsert_entities / upsert_relations / impact_paths
-  llm_client.py        # complete / extract_json
-  embedding_client.py  # embed(texts) -> vectors
+  memory_repo.py       # 会话与记忆读写（含 bump_access / add_weight / set_weight）
+  embedding.py         # embed(texts) -> vectors
   session_cache.py     # L1 get/set/clear
   archive_store.py     # L3 put/list
   clock.py             # 可测试时间
 
 app/adapters/
   sqlite_memory_repo.py
-  sqlite_vec_store.py | chroma_store.py
+  sqlite_vector_store.py        # （无 Chroma 适配器）
   networkx_graph_store.py
-  openai_compatible_llm.py
-  openai_compatible_embedding.py
+  openai_llm.py
+  openai_embedding.py
   memory_session_cache.py
   filesystem_archive.py
 ```
@@ -37,7 +51,7 @@ app/adapters/
 | 扩展点 | 接口职责 | MVP Adapter | 升级路径 |
 |--------|----------|-------------|----------|
 | MemoryRepo | CRUD memories / soft delete | SQLite | Postgres |
-| VectorStore | 向量写入与 top-k | sqlite-vec / Chroma | Qdrant |
+| VectorStore | 向量写入与 top-k | SQLite BLOB + Python cosine（**暴力全表**） | Qdrant |
 | GraphStore | 实体关系与路径 | SQLite + NetworkX | Neo4j |
 | SessionCache | L1 | dict / diskcache | Redis |
 | ArchiveStore | L3 | 本地目录 | S3 |

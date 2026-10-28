@@ -96,7 +96,7 @@ grep -i eraherm ~/.hermes/logs/agent.log | tail
 
 | 层面 | 结果 |
 |------|------|
-| 基础健康 | `hermes memory status` active；config `provider: eraherm`；服务 0.9.1 ok |
+| 基础健康 | `hermes memory status` active；config `provider: eraherm`；服务 0.10.x ok（下表数值为 0.9.1 时实测） |
 | remember / recall | 写入 L2 pinned → 换词语义召回命中 0.54 |
 | evolve（纠正即进化） | 纠正 + 降权后 PostgreSQL(pinned 0.819) 压过旧 MySQL(0.690) |
 | prefetch | 每轮自动注入（日志 injected N items） |

@@ -191,11 +191,19 @@ memory.evolve()     # 纠正即进化（新事实压过旧版）
 | `eraherm-reembed` 全量重嵌 | 已实现 |
 | `HermesMemoryTools` 内置 tool | 已实现 |
 | `AgentMemory` 五能力封装（learn/remember/reflect/recall/evolve） | 已实现 |
-| `fastembed` + `recall_min_score` | 已实现（见 CHANGELOG Unreleased / 待收 0.9.0） |
+| `fastembed` + `recall_min_score` | 已实现（见 CHANGELOG） |
 | **召回门禁改判相关性（ADR 0010，2026-10-08）** | 已实现：绝对分门禁 + `exp(-λ·age)` 会让 `age > 28d` 的记忆永远召不回（线上表现为全库召回为空）。门禁改判 `relevance`（0.18 / 零词法 0.55），pinned 不参与衰减，排序改相关性主导，长文词法按长度二次折扣；`recall_gate_mode=score` 可回滚。回归 `tests/test_recall_gate_age_decoupled.py` |
 | **命中增稳 + base 归一化（ADR 0011，2026-10-08）** | 已实现：`access_count` 从「只写不读」变为有效信号——`boost = min(1+0.35·ln(1+n), 3.0)`、`lambda_eff = lambda/boost`（命中 10 次半衰期 13.9→25.5 天），`recall_max_half_life_days=365` 护栏；排序里 base 改为候选集内归一化（原来是 0.02~0.1 量纲、等于没参与排序）。两个开关可逐位回滚。回归 `tests/test_recall_hit_boost.py` |
 | **主动感知看门狗（phase 9）** | 已实现：`POST /v1/admin/watchdog` 巡检（倒计时/被遗忘宝石/健康信号），零 LLM；敏感记忆（秘密/红线）绝不推送；Host 侧 cron 每 6h 巡检、有料才推飞书（`~/.hermes/scripts/eraherm-watchdog.sh`） |
-| **LLM 图谱抽取/反射（生产启用）** | 已实现：`ERAHERM_LLM_BACKEND=openai`（DeepSeek `deepseek-chat`）。规则抽不出的人物/事实关系（「用户 related_to 合作方」）由 LLM 抽取；纠正反射走 LLM 分析。**敏感内容防护**：含 秘密/红线/不要告诉 等词的输入自动拦截走本地，绝不出网（`app/sensitive.py`，词表与 watchdog 共用） |
+| **LLM 图谱抽取/反射（生产启用）** | 已实现：`ERAHERM_LLM_BACKEND=openai`（DeepSeek `deepseek-chat`）。规则抽不出的人物/事实关系（「用户 related_to 合作方」）由 LLM 抽取；纠正反射走 LLM 分析。**敏感内容防护**：含 秘密/红线/不要告诉 等词的输入回落本地规则（`app/sensitive.py`）。⚠️ 这是中文**词表匹配**，不是可靠的防泄漏边界；`openai` embedding 路径不经过它 |
+| **HTTP 面认证 + 暴露面守卫（ADR 0012，0.10.2）** | 已实现：此前 `/v1/*` 除 admin 外**无任何认证**、`user_id` 自报，`host` 默认 `0.0.0.0`，可匿名读写/投毒/全库导出。现在：`ERAHERM_API_TOKEN`（配了则除 health 外都要带）、默认绑定 `127.0.0.1`、非回环且无 token 时**拒绝启动**、admin 端点 fail-closed（无默认口令 + 恒定时间比较）。回归 `tests/test_security.py` |
+| **门禁旧配置折算修复（0.10.2）** | 已实现：`rel=(score-0.15)/0.85` 在默认点不连续（`0.25→0.18` 而 `0.251→0.1188`，零词法 `0.38→0.55` 而 `0.39→0.2824`）——「调高门禁」反而放宽。改为按默认点比例折算，连续且单调。回归 `tests/test_recall_gate_mapping.py` |
+| **读路径写放大 / 丢更新修复（0.10.2）** | 已实现：`_touch_access` 由「逐条 get + merge 整行」改为单条 UPDATE（同时消除「召回覆盖 feedback 改过的 weight」）；recall 的 pinned/L1 分支由逐条 embedding 改批量；SQLite 补 WAL/busy_timeout；impact 路径枚举加上限并外提关系索引 |
+| **Qdrant 适配器补 `get_meta`/`list_memory_ids`（0.10.2）** | 已实现：此前 reembed 静默全量重嵌、悬空向量清理恒为 0 |
+| **取代链 + 关系有效期（ADR 0013，0.10.2）** | 已实现：纠正后旧记忆标 `superseded_by` 并从召回让路（不删除、可回滚），被取代记忆带出来的关系置 `valid_to` 失效。**遗留**：MCP `eraherm_evolve` 仍无法传 `related_memory_ids` → Cursor 路径上的"旧事实让路"不生效 |
+| **敏感内容 × 远端 embedding fail-closed（ADR 0014，0.10.2）** | 已实现：命中词表即拒绝外发（400），三个 LLM 出网点全部有守卫 |
+| **整理安全网 + 恢复接口（0.10.2）** | 已实现：`dry_run`、删除前自动 L3 归档（失败即放弃删除）、跨进程文件锁、`/v1/admin/memories/restore`、`/v1/admin/l3/restore` |
+| **迁移路径可信化（0.10.2）** | 已实现：`0001` 改显式 DDL、新增幂等 `0003`/`0004`、CI 跑 `alembic upgrade head`、`tests/test_migration_schema.py` 做漂移守卫 |
 
 ## 阶段 8+ 后续（有触发再做）
 
@@ -211,6 +219,8 @@ memory.evolve()     # 纠正即进化（新事实压过旧版）
 | 冲突判定要更准 | ✅ 已做：LLM 冲突判定 Adapter（`llm_reflection.py`，生产已启用，敏感内容自动回落 heuristic） |
 | MCP 远程共享 | Streamable HTTP transport |
 | 第二个真人用户 / 要宣传 | 再补开源承接（Issue 模板等） |
+| **Cursor / MCP 路径上要真正"旧事实让路"** | ⏸ **暂缓（2026-10-09 决定）**。服务端取代链已就绪（ADR 0013），缺的是调用方拿不到 `related_memory_ids`：`eraherm_evolve` 没有这个参数，`AgentMemory.evolve()` 依赖先 `recall()`。两条路二选一：① Host 侧保证「先召回再纠正」；② 服务端在纠正时按语义自己找候选旧记忆（需要一次阈值标定）。**触发条件**：真的有人在 Cursor / 外部 MCP 客户端上依赖「纠正后旧事实让路」这个行为 |
+| 检索栈升级（ANN / BM25 混合 / reranker / query rewrite） | ⏸ **暂缓，且有前置条件**。ADR 0010/0011 的门禁阈值（0.18 / 0.55）是针对当前打分公式与当前 embedding 分数分布**手工标定**的；换检索公式会让阈值全部失效。**必须先**让评测能在真实 embedding 上跑（`ERAHERM_EVAL_SEMANTIC=1` 已留出口）→ 再换检索栈 → 重新标定阈值。详见 [KNOWN_ISSUES §2](KNOWN_ISSUES.md) |
 
 ---
 
@@ -231,6 +241,8 @@ memory.evolve()     # 纠正即进化（新事实压过旧版）
 1. 按 [HERMES_INTEGRATION.md §8 服务器上线检查表](HERMES_INTEGRATION.md) 勾完  
 2. 本机：`python examples/correct_to_evolve.py`（纠正即进化一键验）  
 3. Hermes 端三能力 Demo：记住用户 / 记住项目 / 调用工具  
-4. 可选：把 Unreleased 收成 **0.9.0** tag，方便服务器 pin 版本  
+4. **上线前必做（0.10.2 起）**：确认 `ERAHERM_HOST` + `ERAHERM_API_TOKEN` 组合正确
+   （非回环地址必须配 token，否则启动失败），并设置 `ERAHERM_ADMIN_TOKEN`  
+5. 可选：把 Unreleased 收成版本 tag，方便服务器 pin 版本
 
 远程仓库：https://github.com/yangwenhua212/eraherm-memory
