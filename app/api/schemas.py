@@ -7,6 +7,13 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.models import MemoryType
+
+#: memory_type 的合法取值，直接从枚举派生，避免"文档写了枚举、代码却不校验"的漂移。
+#: 以前任意字符串都能通过，而未知类型会落到 importance 的兜底基线 0.5
+#: （< 提升阈值 0.6），于是「看起来写入成功、其实什么也没存」。
+_MEMORY_TYPE_PATTERN = "^(" + "|".join(m.value for m in MemoryType) + ")$"
+
 
 class ErrorBody(BaseModel):
     code: str
@@ -38,11 +45,13 @@ class CloseSessionResponse(BaseModel):
 
 
 class RememberRequest(BaseModel):
-    content: str
+    # 上限是防「一个请求塞进几 MB 正文再触发一次 embedding」的最低成本护栏。
+    # 10000 字远大于正常记忆（线上最长的一条约 2920 字）。
+    content: str = Field(min_length=1, max_length=10_000)
     session_id: Optional[str] = None
     user_id: Optional[str] = None
     tenant_id: Optional[str] = None
-    memory_type: str = "fact"
+    memory_type: str = Field(default=MemoryType.FACT.value, pattern=_MEMORY_TYPE_PATTERN)
     importance: float = Field(default=0.5, ge=0.0, le=1.0)
     pinned: bool = False
     extract_graph: Optional[bool] = None
@@ -70,6 +79,13 @@ class RememberResponse(BaseModel):
     entities_extracted: int = 0
     relations_extracted: int = 0
     alerts: list[MemoryAlertResponse] = Field(default_factory=list)
+    #: 这条记忆是否真的落库了。``layer="L1"`` 且没有 session_id 时不会落盘：
+    #: 以前 API 依然返回 201 + id，调用方无从判断。现在显式告知。
+    persisted: bool = True
+    drop_reason: Optional[str] = Field(
+        default=None,
+        description="persisted=false 时说明为什么没落库（以及怎么改）",
+    )
 
 
 class PinRequest(BaseModel):
@@ -77,7 +93,9 @@ class PinRequest(BaseModel):
     pinned: bool = True
     user_id: Optional[str] = None
     content: Optional[str] = None
-    memory_type: str = "identity"
+    memory_type: str = Field(
+        default=MemoryType.IDENTITY.value, pattern=_MEMORY_TYPE_PATTERN
+    )
     tenant_id: Optional[str] = None
     session_id: Optional[str] = None
     importance: float = Field(default=1.0, ge=0.0, le=1.0)
@@ -94,12 +112,11 @@ class PinRequest(BaseModel):
 
 class RecallRequest(BaseModel):
     user_id: str
-    query: str
+    query: str = Field(min_length=1, max_length=4_000)
     session_id: Optional[str] = None
     tenant_id: Optional[str] = None
     top_k: Optional[int] = Field(default=None, ge=1, le=100)
     include_pinned: bool = True
-    expand_graph: bool = False
     min_score: Optional[float] = Field(
         default=None,
         ge=0.0,
@@ -246,6 +263,9 @@ class L3ArchiveListResponse(BaseModel):
 class ConsolidateRequest(BaseModel):
     user_id: Optional[str] = None
     tenant_id: Optional[str] = None
+    #: 只统计、不落库。整理是破坏性的（软删冲突/低权重、压缩后删原文），
+    #: 上线前/调参时先用 dry_run 看一眼会动什么。
+    dry_run: bool = False
 
 
 class ConsolidateUserReport(BaseModel):
@@ -257,10 +277,40 @@ class ConsolidateUserReport(BaseModel):
     conflicts_resolved: int
     summary_memory_ids: list[str] = Field(default_factory=list)
     details: list[str] = Field(default_factory=list)
+    dry_run: bool = False
+    skipped_reason: Optional[str] = None
+    archive_id: Optional[str] = None
 
 
 class ConsolidateResponse(BaseModel):
     reports: list[ConsolidateUserReport]
+
+
+class RestoreMemoriesRequest(BaseModel):
+    """恢复被软删的记忆（整理误删的兜底出口）。二选一：显式 id，或按 user_id 恢复最近若干条。"""
+
+    memory_ids: list[str] = Field(default_factory=list)
+    user_id: Optional[str] = None
+    limit: int = Field(default=100, ge=1, le=1000)
+
+
+class RestoreMemoriesResponse(BaseModel):
+    restored: int
+    memory_ids: list[str] = Field(default_factory=list)
+
+
+class RestoreArchiveRequest(BaseModel):
+    """从 L3 归档 JSON 恢复记忆（只补缺失的，不覆盖已存在的）。"""
+
+    archive_id: str
+
+
+class RestoreArchiveResponse(BaseModel):
+    archive_id: str
+    restored_memories: int
+    skipped_existing: int
+    reembedded: int
+    errors: list[str] = Field(default_factory=list)
 
 
 class WatchdogItemOut(BaseModel):

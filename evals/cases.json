@@ -191,5 +191,209 @@
         "expect_recommend_contains": ["超时"]
       }
     ]
+  },
+  {
+    "id": "no_hard_pull_on_unrelated_query_identity",
+    "suite": "negative",
+    "description": "负例：问月球轨道与身份记忆毫无词法/语义交集，召回必须为空（证明门禁不会被 base 分硬拉）",
+    "steps": [
+      {
+        "op": "remember",
+        "user_id": "eval_neg_identity",
+        "content": "用户名为 cc，常用邮箱是 cc@example.com",
+        "memory_type": "identity",
+        "pinned": true,
+        "importance": 1.0,
+        "extract_graph": false
+      },
+      {
+        "op": "remember",
+        "user_id": "eval_neg_identity",
+        "content": "今天天气不错，适合出门散步",
+        "memory_type": "episode",
+        "importance": 0.2,
+        "extract_graph": false
+      },
+      {
+        "op": "recall",
+        "user_id": "eval_neg_identity",
+        "query": "太阳距离地球有多远",
+        "expect_empty": true
+      }
+    ]
+  },
+  {
+    "id": "no_hard_pull_on_unrelated_query_project",
+    "suite": "negative",
+    "description": "负例：问咖啡冲泡与项目事实毫无交集，即使该项目事实重要度很高也必须召回为空",
+    "steps": [
+      {
+        "op": "remember",
+        "user_id": "eval_neg_project",
+        "content": "EraHerm-Memory 的 API 层采用 FastAPI 实现",
+        "memory_type": "fact",
+        "importance": 0.9,
+        "extract_graph": false
+      },
+      {
+        "op": "recall",
+        "user_id": "eval_neg_project",
+        "query": "如何冲泡一杯手冲咖啡",
+        "expect_empty": true
+      }
+    ]
+  },
+  {
+    "id": "correct_then_rank1",
+    "suite": "feedback",
+    "description": "纠正后同义再问，修订事实必须排第 1（不只是「出现过」）——README 那句验收话的排序版本",
+    "steps": [
+      {
+        "op": "remember",
+        "user_id": "eval_fb_rank",
+        "content": "数据库使用 MySQL",
+        "importance": 0.9,
+        "extract_graph": false,
+        "save_as": "wrong_rank"
+      },
+      {
+        "op": "feedback",
+        "user_id": "eval_fb_rank",
+        "answer_id": "ans_eval_rank_1",
+        "feedback_type": "correct",
+        "correction_text": "应该是 PostgreSQL 不是 MySQL",
+        "related_from": "wrong_rank",
+        "expect_status": "accepted"
+      },
+      {
+        "op": "recall",
+        "user_id": "eval_fb_rank",
+        "query": "数据库是 PostgreSQL 吗",
+        "expect_top1_contains": "PostgreSQL",
+        "expect_max_items": 2
+      }
+    ]
+  },
+  {
+    "id": "bounded_top_k_respected",
+    "suite": "recall",
+    "description": "有界召回：top_k=2 时既不能少给（两条都在）也不能多给（不许超过 2 条）",
+    "steps": [
+      {
+        "op": "remember",
+        "user_id": "eval_bounded",
+        "content": "推荐服务通过分片扩容，单实例 QPS 上限为 2000",
+        "memory_type": "fact",
+        "importance": 0.9,
+        "extract_graph": false
+      },
+      {
+        "op": "remember",
+        "user_id": "eval_bounded",
+        "content": "推荐服务每日凌晨执行一次全量模型刷新",
+        "memory_type": "fact",
+        "importance": 0.9,
+        "extract_graph": false
+      },
+      {
+        "op": "recall",
+        "user_id": "eval_bounded",
+        "query": "推荐服务应该怎么扩容",
+        "top_k": 2,
+        "expect_any_contains": ["推荐服务"],
+        "expect_min_items": 2,
+        "expect_max_items": 2
+      }
+    ]
+  },
+  {
+    "id": "cjk_bigram_paraphrase_recall",
+    "suite": "recall",
+    "description": "中文查询整句成一个 token，词法只能靠 CJK bigram 兜底：换语序的再问仍要命中中文记忆",
+    "steps": [
+      {
+        "op": "remember",
+        "user_id": "eval_cjk_bigram",
+        "content": "支付超时时间设置为10秒，重试次数设置为3次，客户端连接池上限为50",
+        "memory_type": "fact",
+        "importance": 0.9,
+        "extract_graph": false
+      },
+      {
+        "op": "recall",
+        "user_id": "eval_cjk_bigram",
+        "query": "超时时间与重试次数分别是多少",
+        "expect_any_contains": ["重试次数"]
+      }
+    ]
+  },
+  {
+    "id": "low_importance_episode_not_persisted",
+    "suite": "memory",
+    "description": "静默丢数据修复：episode + 低重要度 + 无 session_id 时 remember 必须回报 persisted=false（以前返回 201 却什么都没写）",
+    "steps": [
+      {
+        "op": "remember",
+        "user_id": "eval_drop_marker",
+        "content": "今天午餐点了一份沙拉",
+        "memory_type": "episode",
+        "importance": 0.1,
+        "extract_graph": false,
+        "expect_persisted": false
+      }
+    ]
+  },
+  {
+    "id": "cross_user_isolation_same_query",
+    "suite": "isolation",
+    "description": "跨用户隔离：另一个用户跑同一条查询，不得看到本用例用户的记忆内容",
+    "steps": [
+      {
+        "op": "remember",
+        "user_id": "eval_iso_a",
+        "content": "生产环境的主色调是紫色",
+        "memory_type": "preference",
+        "importance": 0.9,
+        "extract_graph": false
+      },
+      {
+        "op": "remember",
+        "user_id": "eval_iso_b",
+        "content": "生产环境的主色调是橙色",
+        "memory_type": "preference",
+        "importance": 0.9,
+        "extract_graph": false
+      },
+      {
+        "op": "recall",
+        "user_id": "eval_iso_a",
+        "query": "生产环境的主色调是什么",
+        "expect_any_contains": ["紫色"],
+        "expect_absent_contains": ["紫色"],
+        "as_user_id": "eval_iso_b"
+      }
+    ]
+  },
+  {
+    "id": "semantic_paraphrase_en_query_cjk_memory",
+    "suite": "semantic",
+    "description": "英文问句（无任何字符交集）召回中文记忆——只有真语义嵌入才可能成立，hashing 下必须跳过而不是失败",
+    "requires_semantic_embedding": true,
+    "steps": [
+      {
+        "op": "remember",
+        "user_id": "eval_semantic",
+        "content": "生产模型每周日凌晨执行一次全量重训练，训练数据来自近 30 天的线上日志",
+        "memory_type": "fact",
+        "importance": 0.9,
+        "extract_graph": false
+      },
+      {
+        "op": "recall",
+        "user_id": "eval_semantic",
+        "query": "How often is the production model retrained?",
+        "expect_any_contains": ["重训练"]
+      }
+    ]
   }
 ]

@@ -7,8 +7,9 @@ import struct
 from typing import Optional, Sequence
 
 from sqlalchemy import Column, LargeBinary
-from sqlmodel import Field, Session, SQLModel, col, create_engine, select
+from sqlmodel import Field, Session, SQLModel, col, select
 
+from app.db import create_sqlite_engine
 from app.models import utc_now_iso
 from app.ports.vector_store import VectorHit
 
@@ -18,6 +19,10 @@ class EmbeddingRow(SQLModel, table=True):
 
     memory_id: str = Field(primary_key=True)
     user_id: Optional[str] = Field(default=None, index=True)
+    # 租户维度必须落在向量行上：否则检索只能按 user_id 取回全部候选，
+    # 再在 service 层"事后"过滤 tenant —— top-k 可能被其它租户占满，
+    # 结果是「本租户明明有匹配，召回却为空」。
+    tenant_id: Optional[str] = Field(default=None, index=True)
     model: str = Field(default="")
     dim: int = Field(default=0)
     vector: bytes = Field(sa_column=Column(LargeBinary, nullable=False))
@@ -51,8 +56,7 @@ class SqliteVectorStore:
         if engine is not None:
             self.engine = engine
         else:
-            connect_args = {"check_same_thread": False} if database_url.startswith("sqlite") else {}
-            self.engine = create_engine(database_url, connect_args=connect_args)
+            self.engine = create_sqlite_engine(database_url)
         SQLModel.metadata.create_all(self.engine)
 
     def upsert(
@@ -62,11 +66,13 @@ class SqliteVectorStore:
         user_id: str | None,
         vector: Sequence[float],
         model: str,
+        tenant_id: str | None = None,
     ) -> None:
         blob = pack_vector(vector)
         row = EmbeddingRow(
             memory_id=memory_id,
             user_id=user_id,
+            tenant_id=tenant_id,
             model=model,
             dim=len(vector),
             vector=blob,
@@ -78,6 +84,7 @@ class SqliteVectorStore:
                 db.add(row)
             else:
                 existing.user_id = user_id
+                existing.tenant_id = tenant_id
                 existing.model = model
                 existing.dim = len(vector)
                 existing.vector = blob
@@ -102,7 +109,12 @@ class SqliteVectorStore:
             row = db.get(EmbeddingRow, memory_id)
             if row is None:
                 return None
-            return {"user_id": row.user_id, "model": row.model, "dim": row.dim}
+            return {
+                "user_id": row.user_id,
+                "tenant_id": row.tenant_id,
+                "model": row.model,
+                "dim": row.dim,
+            }
 
     def list_memory_ids(self) -> list[str]:
         with Session(self.engine) as db:
@@ -115,9 +127,13 @@ class SqliteVectorStore:
         query: Sequence[float],
         user_id: str,
         top_k: int,
+        tenant_id: str | None = None,
     ) -> list[VectorHit]:
         with Session(self.engine) as db:
             stmt = select(EmbeddingRow).where(EmbeddingRow.user_id == user_id)
+            if tenant_id is not None:
+                # 前置过滤：租户不同的候选根本不进入打分，避免 top-k 被别的租户占满。
+                stmt = stmt.where(EmbeddingRow.tenant_id == tenant_id)
             rows = list(db.exec(stmt).all())
         scored: list[VectorHit] = []
         for row in rows:

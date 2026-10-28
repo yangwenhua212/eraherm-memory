@@ -32,6 +32,11 @@ class OpenAICompatibleEmbeddingClient:
         return self._model
 
     @property
+    def is_remote(self) -> bool:
+        """文本会离开本机（敏感内容因此默认拒绝外发，见 app/sensitive.py）。"""
+        return True
+
+    @property
     def dimensions(self) -> int:
         if self._resolved_dim is None:
             raise RuntimeError("dimensions unknown until first embed() call")

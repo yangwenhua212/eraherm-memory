@@ -78,13 +78,22 @@ class RedisSessionCache:
         return int(n)
 
     def drop_lowest(self, session_id: str, keep: int) -> int:
+        """按重要度裁到 keep 条。
+
+        先用 ``llen`` 判断是否真的超限：以前无论是否超限都要
+        ``lrange`` 全量读 + ``delete`` + 全量重写，而调用方**每写一条 L1 就调一次**，
+        于是每条 remember 都付一次 O(n) 网络往返。
+        """
+        key = self._key(session_id)
+        total = int(self._r.llen(key))
+        if total <= keep:
+            return 0
         items = self.list(session_id)
         if len(items) <= keep:
             return 0
         ranked = sorted(items, key=lambda x: (x.importance * x.weight, x.created_at), reverse=True)
         kept = ranked[:keep]
         dropped = len(items) - len(kept)
-        key = self._key(session_id)
         pipe = self._r.pipeline()
         pipe.delete(key)
         if kept:

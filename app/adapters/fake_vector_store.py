@@ -11,7 +11,8 @@ from app.ports.vector_store import VectorHit
 
 class FakeVectorStore:
     def __init__(self) -> None:
-        self._data: dict[str, tuple[str | None, str, list[float]]] = {}
+        # memory_id -> (user_id, tenant_id, model, vector)
+        self._data: dict[str, tuple[str | None, str | None, str, list[float]]] = {}
 
     def upsert(
         self,
@@ -20,8 +21,9 @@ class FakeVectorStore:
         user_id: str | None,
         vector: Sequence[float],
         model: str,
+        tenant_id: str | None = None,
     ) -> None:
-        self._data[memory_id] = (user_id, model, [float(v) for v in vector])
+        self._data[memory_id] = (user_id, tenant_id, model, [float(v) for v in vector])
 
     def delete(self, memory_ids: Sequence[str]) -> int:
         n = 0
@@ -34,8 +36,8 @@ class FakeVectorStore:
         row = self._data.get(memory_id)
         if row is None:
             return None
-        uid, model, vec = row
-        return {"user_id": uid, "model": model, "dim": len(vec)}
+        uid, tenant_id, model, vec = row
+        return {"user_id": uid, "tenant_id": tenant_id, "model": model, "dim": len(vec)}
 
     def list_memory_ids(self) -> list[str]:
         return list(self._data.keys())
@@ -46,10 +48,13 @@ class FakeVectorStore:
         query: Sequence[float],
         user_id: str,
         top_k: int,
+        tenant_id: str | None = None,
     ) -> list[VectorHit]:
         hits: list[VectorHit] = []
-        for mid, (uid, _model, vec) in self._data.items():
+        for mid, (uid, tid, _model, vec) in self._data.items():
             if uid != user_id:
+                continue
+            if tenant_id is not None and tid != tenant_id:
                 continue
             hits.append(VectorHit(memory_id=mid, score=cosine(query, vec)))
         hits.sort(key=lambda h: h.score, reverse=True)

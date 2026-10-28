@@ -18,6 +18,7 @@ from app.models import (
     ReflectionRecordRow,
     ReflectionStatus,
 )
+from app.observability.logging import logger
 from app.ports.clock import Clock
 from app.ports.reflection import ReflectionPipeline
 
@@ -98,6 +99,7 @@ class FeedbackService:
             self.memory.adjust_weights(
                 related_memory_ids,
                 delta=self.settings.upvote_weight_delta,
+                user_id=user_id,
             )
             return FeedbackResult(feedback_id=event.id, reflection=None)
 
@@ -116,6 +118,7 @@ class FeedbackService:
                 self.memory.adjust_weights(
                     related_memory_ids,
                     delta=self.settings.downvote_weight_delta,
+                    user_id=user_id,
                 )
             self.job_queue.enqueue(
                 Job(
@@ -227,6 +230,7 @@ class FeedbackService:
             self.memory.adjust_weights(
                 related_memory_ids,
                 delta=self.settings.downvote_weight_delta,
+                user_id=user_id,
             )
         return self._finalize_reflection(
             event=event,
@@ -348,6 +352,24 @@ class FeedbackService:
             mem.updated_at = self._now_iso()
             self.memory.repo.save_memory(mem)
 
+        # 纠正即进化（ADR 0013）：把被纠正的旧记忆标记为「已被取代」。
+        # 以前只把旧条 weight 减 0.1 —— 旧错仍留在库里、仍可能参与召回竞争，
+        # 而且没有任何数据结构表达「这条被那条取代了」。现在有显式取代链：
+        # 旧的让路（召回跳过），但不删除（可审计、可回滚）。
+        if ft == FeedbackType.CORRECT.value and related_memory_ids:
+            superseded = self.memory.supersede_memories(
+                related_memory_ids, superseded_by=derived.id
+            )
+            self._invalidate_relations(related_memory_ids)
+            if superseded:
+                logger.info(
+                    "memories_superseded",
+                    extra={
+                        "memory_id": derived.id,
+                        "detail": f"superseded {superseded} previous memor(y|ies)",
+                    },
+                )
+
         ref.status = ReflectionStatus.ACCEPTED.value
         ref.derived_memory_id = derived.id
         ref = self.store.save_reflection(ref)
@@ -365,3 +387,25 @@ class FeedbackService:
 
     def _now_iso(self) -> str:
         return self.clock.now().replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+    def _invalidate_relations(self, memory_ids: list[str]) -> int:
+        """让被取代记忆「带出来的」关系失效（valid_to 置为现在）。
+
+        这样图谱才回答得了「以前 A 依赖 B，现在不依赖了」——以前 relations
+        没有有效期，纠错只改了记忆、图里那条边还活着，impact 仍会指向它。
+        失败不影响纠正本身（只记日志）。
+        """
+        graph = getattr(self.memory, "graph_service", None)
+        if graph is None or not memory_ids:
+            return 0
+        invalidate = getattr(graph, "invalidate_relations_for_memories", None)
+        if not callable(invalidate):
+            return 0
+        try:
+            return int(invalidate(memory_ids) or 0)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "relation_invalidation_failed",
+                extra={"detail": str(exc)[:200]},
+            )
+            return 0

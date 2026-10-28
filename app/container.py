@@ -19,7 +19,7 @@ from app.config import Settings, get_settings
 from app.feedback.service import FeedbackService
 from app.graph.service import GraphService
 from app.memory.service import MemoryService
-from app.observability.logging import setup_logging
+from app.observability.logging import logger, setup_logging
 from app.ports.clock import SystemClock
 from app.ports.embedding import EmbeddingClient
 from app.ports.graph_store import GraphStore
@@ -80,7 +80,7 @@ def build_session_cache(settings: Settings) -> SessionCache:
         from app.adapters.redis_session_cache import RedisSessionCache
 
         return RedisSessionCache(url=settings.redis_url)
-    return InMemorySessionCache()
+    return InMemorySessionCache(max_sessions=settings.session_cache_max_sessions)
 
 
 def build_vector_store(settings: Settings, *, engine) -> VectorStore:
@@ -165,7 +165,16 @@ def build_container(settings: Settings | None = None) -> Container:
     from sqlmodel import SQLModel
     from app.models import L3ArchiveRow  # noqa: F401
 
-    SQLModel.metadata.create_all(repo.engine)
+    # schema 事实来源应该是 alembic。这里的 create_all 只为「嵌入式 / 未跑迁移」
+    # 场景兜底（测试与 MCP 本地模式直接构造仓储，不会跑 alembic）。
+    # 生产请设 ERAHERM_AUTO_CREATE_SCHEMA=false 并只走 `alembic upgrade head`。
+    if settings.auto_create_schema:
+        SQLModel.metadata.create_all(repo.engine)
+    else:
+        logger.info(
+            "schema_autocreate_disabled",
+            extra={"detail": "relying on alembic migrations (ensure you ran: alembic upgrade head)"},
+        )
 
     extractor = build_graph_extractor(settings)
     graph_service = GraphService(
@@ -204,12 +213,17 @@ def build_container(settings: Settings | None = None) -> Container:
     )
     job_queue = None
     if settings.feedback_async:
-        job_queue = InMemoryJobQueue(handler=feedback_service.process_job)
+        job_queue = InMemoryJobQueue(
+            handler=feedback_service.process_job,
+            max_size=settings.job_queue_max_size,
+        )
         feedback_service.job_queue = job_queue
 
     l3_service = L3ArchiveService(
         engine=repo.engine,
         archive_store=FilesystemArchiveStore(settings.data_dir / "l3"),
+        # 让 /v1/admin/l3/restore 能把恢复出来的记忆重新嵌入
+        memory=memory_service,
     )
 
     summarizer: HeuristicSummarizer | LLMSummarizer = HeuristicSummarizer()
@@ -234,6 +248,9 @@ def build_container(settings: Settings | None = None) -> Container:
         settings=settings,
         clock=clock,
         summarizer=summarizer,
+        # 删除前自动归档（consolidation_archive_before_delete）：整理是破坏性的，
+        # 归档是「能不能后悔」的前提。归档失败时整理会放弃删除。
+        archiver=lambda uid: l3_service.dump(user_id=uid).archive_id,
     )
 
     watchdog_service = WatchdogService(repo=repo, settings=settings)

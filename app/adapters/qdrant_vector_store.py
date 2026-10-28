@@ -56,6 +56,7 @@ class QdrantVectorStore:
         user_id: str | None,
         vector: Sequence[float],
         model: str,
+        tenant_id: str | None = None,
     ) -> None:
         point = self._qm.PointStruct(
             id=self._point_id(memory_id),
@@ -63,10 +64,51 @@ class QdrantVectorStore:
             payload={
                 "memory_id": memory_id,
                 "user_id": user_id,
+                "tenant_id": tenant_id,
                 "model": model,
+                # dim 必须落盘：reembed 的 _is_current 需要它判断「维度是否已变」。
+                # 以前 payload 里没有 dim，导致换模型时无法判断 → 只能每次全量重嵌。
+                "dim": len(vector),
             },
         )
         self._client.upsert(collection_name=self._collection, points=[point])
+
+    def get_meta(self, memory_id: str) -> dict | None:
+        records = self._client.retrieve(
+            collection_name=self._collection,
+            ids=[self._point_id(memory_id)],
+            with_payload=True,
+            with_vectors=False,
+        )
+        if not records:
+            return None
+        payload = records[0].payload or {}
+        if not payload.get("memory_id"):
+            return None
+        return {
+            "user_id": payload.get("user_id"),
+            "model": payload.get("model"),
+            "dim": int(payload.get("dim") or self._vector_size),
+        }
+
+    def list_memory_ids(self) -> list[str]:
+        ids: list[str] = []
+        offset = None
+        while True:
+            points, offset = self._client.scroll(
+                collection_name=self._collection,
+                limit=1000,
+                offset=offset,
+                with_payload=True,
+                with_vectors=False,
+            )
+            for point in points:
+                mid = (point.payload or {}).get("memory_id")
+                if mid:
+                    ids.append(str(mid))
+            if offset is None:
+                break
+        return ids
 
     def delete(self, memory_ids: Sequence[str]) -> int:
         if not memory_ids:
@@ -84,10 +126,19 @@ class QdrantVectorStore:
         query: Sequence[float],
         user_id: str,
         top_k: int,
+        tenant_id: str | None = None,
     ) -> list[VectorHit]:
-        qfilter = self._qm.Filter(
-            must=[self._qm.FieldCondition(key="user_id", match=self._qm.MatchValue(value=user_id))]
-        )
+        must = [
+            self._qm.FieldCondition(key="user_id", match=self._qm.MatchValue(value=user_id))
+        ]
+        if tenant_id is not None:
+            # 前置过滤（写在 Qdrant filter 里，而不是取回后再筛）
+            must.append(
+                self._qm.FieldCondition(
+                    key="tenant_id", match=self._qm.MatchValue(value=tenant_id)
+                )
+            )
+        qfilter = self._qm.Filter(must=must)
         vector = [float(v) for v in query]
         # qdrant-client >=1.12 uses query_points; older used search
         if hasattr(self._client, "query_points"):

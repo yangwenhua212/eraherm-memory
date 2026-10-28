@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import json
 import math
-import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Sequence
@@ -13,6 +12,15 @@ from typing import TYPE_CHECKING, Any, Sequence
 from app.adapters.sqlite_vector_store import cosine
 from app.config import Settings
 from app.graph.service import GraphService
+from app.memory.gate import (
+    LEX_EVIDENCE_MIN,
+    clamp01,
+    length_adjusted_lexical,
+    legacy_relevance_floor,
+    lexical_similarity,
+    passes_recall_gates,
+    tokenize,
+)
 from app.memory.importance import resolve_importance
 from app.models import (
     L1Item,
@@ -22,11 +30,13 @@ from app.models import (
     SessionRow,
     SessionStatus,
 )
+from app.observability.logging import logger
 from app.ports.clock import Clock
 from app.ports.embedding import EmbeddingClient
 from app.ports.memory_repo import MemoryRepository
 from app.ports.session_cache import SessionCache
 from app.ports.vector_store import VectorStore
+from app.sensitive import assert_remote_embedding_allowed
 
 if TYPE_CHECKING:
     from app.proactive.service import MemoryAlert, ProactiveService, Recommendation
@@ -113,6 +123,11 @@ class RememberResult:
     relations_extracted: int = 0
     importance: float = 0.0
     alerts: list[MemoryAlert] = field(default_factory=list)
+    #: 是否真的落库了。以前这个信息不存在：重要度不足且没有 session_id 时，
+    #: ``remember`` 会返回 201 + 一个 id，但其实**什么都没写**，调用方无从得知。
+    persisted: bool = True
+    #: 未落库的原因（persisted=False 时给出可操作的说明）
+    drop_reason: str | None = None
 
 
 @dataclass
@@ -176,10 +191,12 @@ class MemoryService:
         )
         return self.repo.create_session(row)
 
-    def close_session(self, session_id: str) -> CloseSessionResult:
+    def close_session(self, session_id: str, *, user_id: str | None = None) -> CloseSessionResult:
         session = self.repo.get_session(session_id)
         if session is None:
             raise KeyError(f"session not found: {session_id}")
+        if user_id and session.user_id and session.user_id != user_id:
+            raise PermissionError(f"session {session_id} belongs to another user")
         if session.status == SessionStatus.CLOSED.value:
             raise ValueError(f"session already closed: {session_id}")
 
@@ -252,17 +269,39 @@ class MemoryService:
         )
 
         write_l2 = pinned or importance >= self.settings.promotion_importance_threshold
+        persisted = True
+        drop_reason: str | None = None
         if session_id:
             self.cache.append(session_id, item)
             self.cache.drop_lowest(session_id, self.settings.l1_max_items_per_session)
 
         if write_l2:
+            self._assert_embeddable(content)
             row = self._write_l2_from_l1(item, source=MemorySource.INGEST.value)
             layer = "L2"
             mem_id = row.id
         else:
             layer = "L1"
             mem_id = item.id
+            # 关键：没有 session_id 时 L1 只是「会话热数据」，不会落盘。
+            # 以前这里静默返回成功，调用方以为存下了。
+            if not session_id:
+                persisted = False
+                drop_reason = (
+                    "importance "
+                    f"{importance:.2f} < promotion_importance_threshold "
+                    f"{self.settings.promotion_importance_threshold:.2f} and no session_id: "
+                    "nothing was persisted. Pass session_id, raise importance, or set pinned=True."
+                )
+                logger.warning(
+                    "memory_not_persisted",
+                    extra={
+                        "reason": drop_reason,
+                        "user_id": user_id,
+                        "memory_type": memory_type,
+                        "layer": layer,
+                    },
+                )
 
         do_extract = (
             extract_graph if extract_graph is not None else self.settings.extract_on_remember
@@ -296,12 +335,19 @@ class MemoryService:
             entities_extracted=entities_n,
             relations_extracted=relations_n,
             alerts=alerts,
+            persisted=persisted,
+            drop_reason=drop_reason,
         )
 
-    def pin_existing(self, memory_id: str, pinned: bool = True) -> MemoryRow:
+    def pin_existing(
+        self, memory_id: str, pinned: bool = True, *, user_id: str | None = None
+    ) -> MemoryRow:
         row = self.repo.get_memory(memory_id)
         if row is None or row.deleted_at is not None:
             raise KeyError(f"memory not found: {memory_id}")
+        # 归属校验：以前任何调用方拿到 memory_id 就能改别人的 pin 状态。
+        if user_id and row.user_id and row.user_id != user_id:
+            raise PermissionError(f"memory {memory_id} belongs to another user")
         row.pinned = pinned
         row.updated_at = self._now_iso()
         saved = self.repo.save_memory(row)
@@ -352,8 +398,10 @@ class MemoryService:
         hit_boost_cap = self.settings.recall_hit_boost_cap
         max_half_life_days = self.settings.recall_max_half_life_days
         base_normalize = bool(self.settings.recall_rank_base_normalize)
+        exclude_superseded = bool(self.settings.recall_exclude_superseded)
         gate_mode = (self.settings.recall_gate_mode or "relevance").strip().lower()
-        tokens = _tokenize(query)
+        tokens = tokenize(query)
+        self._assert_embeddable(query)
         query_vec = self.embedding.embed([query])[0]
         vector_weight = self.settings.recall_vector_weight
         lexical_weight = 1.0 - vector_weight
@@ -365,6 +413,8 @@ class MemoryService:
             query=query_vec,
             user_id=user_id,
             top_k=max(top_k * 3, 20),
+            # 租户必须**在检索层**过滤；事后过滤会让别的租户占满 top-k → 召回空
+            tenant_id=tenant_id,
         )
         hit_ids = [h.memory_id for h in hits]
         hit_scores = {h.memory_id: h.score for h in hits}
@@ -372,13 +422,16 @@ class MemoryService:
         row_map = {r.id: r for r in rows if r.deleted_at is None}
         if tenant_id is not None:
             row_map = {k: v for k, v in row_map.items() if v.tenant_id == tenant_id}
+        if exclude_superseded:
+            # 已被取代的记忆不再参与竞争（但没被删除：历史可审计、可回滚）
+            row_map = {k: v for k, v in row_map.items() if not v.superseded_by}
 
         # 词法信号按内容长度折扣（防长文「大杂烩」绕过门禁）
         lex_norm = self.settings.recall_lexical_len_norm
 
         def _lex_of(content: str) -> float:
-            return _length_adjusted_lexical(
-                _lexical_similarity(content, tokens), len(content), lex_norm
+            return length_adjusted_lexical(
+                lexical_similarity(content, tokens), len(content), lex_norm
             )
 
         for mid, row in row_map.items():
@@ -403,7 +456,7 @@ class MemoryService:
                 decay_lambda=decay,
                 now=now,
             )
-            sim = _clamp01(hit_scores.get(mid, 0.0))
+            sim = clamp01(hit_scores.get(mid, 0.0))
             lex = _lex_of(row.content)
             relevance = vector_weight * sim + lexical_weight * lex
             score = base * (0.15 + 0.85 * relevance)
@@ -424,11 +477,23 @@ class MemoryService:
 
         # Also include pinned L2 not returned by vector top list
         if include_pinned:
-            for row in self.repo.list_active_by_user(
-                user_id, tenant_id=tenant_id, pinned_only=True, limit=self.settings.recall_pinned_cap
-            ):
-                if row.id in by_id:
-                    continue
+            pinned_rows = [
+                row
+                for row in self.repo.list_active_by_user(
+                    user_id,
+                    tenant_id=tenant_id,
+                    pinned_only=True,
+                    limit=self.settings.recall_pinned_cap,
+                )
+                if row.id not in by_id
+            ]
+            # 一次批量嵌入，而不是每行一次（openai 后端下每行一次 = 一次 TLS 握手 + 一次计费调用）
+            pinned_vecs = (
+                self.embedding.embed([row.content for row in pinned_rows])
+                if pinned_rows
+                else []
+            )
+            for row, row_vec in zip(pinned_rows, pinned_vecs):
                 boost_f = stability_boost(
                     row.access_count, alpha=hit_boost_alpha, cap=hit_boost_cap
                 ) if hit_boost_enabled else 1.0
@@ -450,7 +515,7 @@ class MemoryService:
                     decay_lambda=decay,
                     now=now,
                 )
-                sim = _clamp01(cosine(query_vec, self.embedding.embed([row.content])[0]))
+                sim = clamp01(cosine(query_vec, row_vec))
                 lex = _lex_of(row.content)
                 relevance = vector_weight * sim + lexical_weight * lex
                 by_id[row.id] = RecallItem(
@@ -470,7 +535,24 @@ class MemoryService:
 
         # L1 session items (on-the-fly embedding)
         if session_id:
-            for item in self.cache.list(session_id):
+            # 归属校验：带上别人的 session_id 就能读到别人的 L1 原文。
+            session_row = self.repo.get_session(session_id)
+            if (
+                session_row is not None
+                and session_row.user_id
+                and session_row.user_id != user_id
+            ):
+                logger.warning(
+                    "l1_recall_skipped_foreign_session",
+                    extra={"user_id": user_id, "detail": f"session {session_id}"},
+                )
+                session_id = None
+        if session_id:
+            l1_items = list(self.cache.list(session_id))
+            l1_vecs = (
+                self.embedding.embed([item.content for item in l1_items]) if l1_items else []
+            )
+            for item, item_vec in zip(l1_items, l1_vecs):
                 # L1 会话条目没有 access_count → 不参与命中增稳（boost 恒为 1.0）
                 decay = decay_lambda_for(
                     pinned=item.pinned,
@@ -485,9 +567,9 @@ class MemoryService:
                     decay_lambda=decay,
                     now=now,
                 )
-                sim = _clamp01(cosine(query_vec, self.embedding.embed([item.content])[0]))
+                sim = clamp01(cosine(query_vec, item_vec))
                 lex = _lex_of(item.content)
-                relevance = vector_weight * _clamp01(sim) + lexical_weight * lex
+                relevance = vector_weight * clamp01(sim) + lexical_weight * lex
                 score = base * (0.15 + 0.85 * relevance)
                 # Prefer L2 entry if same id already promoted
                 if item.id in by_id and by_id[item.id].layer == "L2":
@@ -512,17 +594,19 @@ class MemoryService:
         rel_min = self.settings.recall_rel_min
         rel_min_no_lex = self.settings.recall_rel_min_no_lexical
         if gate_mode == "relevance":
-            # 兼容旧的绝对分门禁配置：<=0 关闭该档，非默认值换算到相关性空间。
-            legacy_lex = _legacy_rel_floor(
-                self.settings.recall_min_score, _DEFAULT_MIN_SCORE
+            # 兼容旧的绝对分门禁配置：按「默认点」比例折算到相关性空间。
+            # 旧实现 rel=(score-0.15)/0.85 在默认值处不连续（0.25→0.18 而 0.26→0.129），
+            # 于是「调高门禁」反而放宽了门禁 —— 详见 app/memory/gate.py 模块 docstring。
+            rel_min = legacy_relevance_floor(
+                self.settings.recall_min_score,
+                score_default=_DEFAULT_MIN_SCORE,
+                relevance_default=self.settings.recall_rel_min,
             )
-            legacy_nolex = _legacy_rel_floor(
-                self.settings.recall_min_score_no_lexical, _DEFAULT_MIN_SCORE_NO_LEXICAL
+            rel_min_no_lex = legacy_relevance_floor(
+                self.settings.recall_min_score_no_lexical,
+                score_default=_DEFAULT_MIN_SCORE_NO_LEXICAL,
+                relevance_default=self.settings.recall_rel_min_no_lexical,
             )
-            if legacy_lex is not None:
-                rel_min = legacy_lex
-            if legacy_nolex is not None:
-                rel_min_no_lex = legacy_nolex
             if min_score is not None:
                 if min_score <= 0:
                     rel_min = 0.0
@@ -532,7 +616,7 @@ class MemoryService:
         candidates = [
             c
             for c in by_id.values()
-            if _passes_recall_gates(
+            if passes_recall_gates(
                 score=c.score,
                 relevance=c.relevance,
                 lexical=c.lexical,
@@ -583,16 +667,15 @@ class MemoryService:
         return result
 
     def _touch_access(self, memory_ids: Sequence[str]) -> None:
+        """命中计数 +1。
+
+        以前是「逐条 get_memory → 改字段 → save_memory（merge 整行）」：
+        默认 top_k=8 就是 8 次 SELECT + 8 个写事务，而且整行回写会把并发写者
+        （例如 feedback 改过的 weight）用陈旧快照覆盖掉。现在一条 UPDATE 搞定。
+        """
         if not memory_ids:
             return
-        now = self._now_iso()
-        for mid in memory_ids:
-            row = self.repo.get_memory(mid)
-            if row is None or row.deleted_at is not None:
-                continue
-            row.access_count = int(row.access_count or 0) + 1
-            row.last_accessed_at = now
-            self.repo.save_memory(row)
+        self.repo.bump_access(list(memory_ids), self._now_iso())
 
     def recommend_sidecar(
         self,
@@ -630,7 +713,19 @@ class MemoryService:
         for row in rows:
             if row.pinned:
                 continue
-            decay = row.decay_lambda if row.decay_lambda is not None else lam
+            # 与召回路径共用同一套衰减语义（命中增稳 + 半衰期护栏）。
+            # 以前这里直接用 row.decay_lambda，忽略 boost 和护栏 —— 同一个库两套衰减标准。
+            decay = decay_lambda_for(
+                pinned=row.pinned,
+                row_lambda=row.decay_lambda,
+                default_lambda=lam,
+                pinned_no_decay=self.settings.recall_pinned_no_decay,
+                access_count=row.access_count,
+                boost_enabled=bool(self.settings.recall_hit_boost_enabled),
+                boost_alpha=self.settings.recall_hit_boost_alpha,
+                boost_cap=self.settings.recall_hit_boost_cap,
+                max_half_life_days=self.settings.recall_max_half_life_days,
+            )
             score = effective_score(
                 importance=row.importance,
                 weight=row.weight,
@@ -645,21 +740,80 @@ class MemoryService:
             self.vectors.delete(to_delete)
         return deleted
 
-    def adjust_weights(self, memory_ids: Sequence[str], *, delta: float) -> int:
-        """Apply feedback weight delta to existing L2 memories. Returns updated count."""
-        if not memory_ids or delta == 0:
+    def adjust_weights(
+        self, memory_ids: Sequence[str], *, delta: float, user_id: str | None = None
+    ) -> int:
+        """Apply feedback weight delta to existing L2 memories. Returns updated count.
+
+        单条 UPDATE（带夹取），不再逐行读改写：避免与 recall 的整行回写互相覆盖。
+        传入 ``user_id`` 时会跳过不属于该用户的记忆（防止用别人的 memory_id 调权重）。
+        """
+        ids = [m for m in memory_ids if m]
+        if not ids or delta == 0:
             return 0
-        updated = 0
-        now = self._now_iso()
+        if user_id:
+            allowed: list[str] = []
+            for mid in ids:
+                row = self.repo.get_memory(mid)
+                if row is None or row.deleted_at is not None:
+                    continue
+                if row.user_id and row.user_id != user_id:
+                    logger.warning(
+                        "weight_update_skipped_foreign_memory",
+                        extra={"memory_id": mid, "user_id": user_id},
+                    )
+                    continue
+                allowed.append(mid)
+            ids = allowed
+            if not ids:
+                return 0
+        return self.repo.add_weight(ids, delta=delta, updated_at=self._now_iso())
+
+    def supersede_memories(self, memory_ids: Sequence[str], *, superseded_by: str) -> int:
+        """把被纠正的旧记忆标记为「已被取代」（ADR 0013）。
+
+        **不删除**：历史仍可审计、可回滚；只是召回默认跳过它们
+        （``ERAHERM_RECALL_EXCLUDE_SUPERSEDED``）。
+        """
+        ids = [m for m in memory_ids if m and m != superseded_by]
+        if not ids:
+            return 0
+        return self.repo.supersede(
+            ids, superseded_by=superseded_by, superseded_at=self._now_iso()
+        )
+
+    def reembed_memories(self, memory_ids: Sequence[str]) -> int:
+        """为已存在的记忆重建向量（恢复归档 / 修复缺失向量时用）。
+
+        单条失败不影响其它条目：只记日志并继续（该条仍可被词法路径召回）。
+        """
+        done = 0
         for mid in memory_ids:
             row = self.repo.get_memory(mid)
             if row is None or row.deleted_at is not None:
                 continue
-            row.weight = max(0.05, min(3.0, row.weight + delta))
-            row.updated_at = now
-            self.repo.save_memory(row)
-            updated += 1
-        return updated
+            try:
+                self._embed_memory(row)
+                done += 1
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "reembed_failed",
+                    extra={"memory_id": mid, "detail": str(exc)[:200]},
+                )
+        return done
+
+    def restore_memories(self, memory_ids: Sequence[str]) -> int:
+        """恢复被软删的记忆，并重新建立向量。返回恢复条数。
+
+        这是「整理误删」的兜底出口：consolidate 会软删冲突/低权重条目且不删向量，
+        没有这个接口就只能手改数据库。
+        """
+        ids = [m for m in memory_ids if m]
+        if not ids:
+            return 0
+        restored = self.repo.restore_memories(ids)
+        self.reembed_memories(ids)
+        return restored
 
     def _write_l2_from_l1(self, item: L1Item, *, source: str) -> MemoryRow:
         now = self._now_iso()
@@ -687,107 +841,46 @@ class MemoryService:
         return saved
 
     def _embed_memory(self, row: MemoryRow) -> None:
+        self._assert_embeddable(row.content)
         vector = self.embedding.embed([row.content])[0]
         self.vectors.upsert(
             memory_id=row.id,
             user_id=row.user_id,
             vector=vector,
             model=self.embedding.model_name,
+            tenant_id=row.tenant_id,
+        )
+
+    def _assert_embeddable(self, *texts: str) -> None:
+        """远端 embedding + 敏感内容 = 拒绝外发（fail-closed）。
+
+        以前这份词表只挡 LLM 抽取/反射，而 ``embedding_backend=openai`` 会把
+        记忆正文原样发给外部服务 —— 于是「敏感内容绝不出网」是假的。现在
+        在入口就把这条承诺变成真的：要么换本地 embedding，要么显式关掉这个开关。
+        """
+        assert_remote_embedding_allowed(
+            list(texts),
+            is_remote=bool(getattr(self.embedding, "is_remote", False)),
+            enforced=bool(self.settings.sensitive_requires_local_embedding),
         )
 
     def _now_iso(self) -> str:
         return self.clock.now().replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def _tokenize(text: str) -> list[str]:
-    return [t for t in re.split(r"[\s,.;:!?，。；：！？、]+", text.lower()) if t]
-
-
-def _lexical_similarity(content: str, tokens: list[str]) -> float:
-    if not tokens:
-        return 0.0
-    hay = content.lower()
-    hits = sum(1 for t in tokens if t in hay)
-    if hits:
-        return hits / len(tokens)
-    # CJK often arrives as one unsegmented token — use character bigrams.
-    joined = "".join(tokens)
-    cjk = [ch for ch in joined if "\u4e00" <= ch <= "\u9fff"]
-    if len(cjk) >= 2:
-        bigrams = {"".join(cjk[i : i + 2]) for i in range(len(cjk) - 1)}
-        shared = sum(1 for bg in bigrams if bg in hay)
-        return shared / len(bigrams) if bigrams else 0.0
-    return 0.0
-
-
-def _clamp01(x: float) -> float:
-    # Cosine can be negative for hashing collisions; floor at 0 for ranking blend.
-    return max(0.0, min(1.0, x))
-
-
-# 旧门禁配置的默认值（用来判断调用方是否显式改过）
+# 旧门禁配置的默认值：作为「旧绝对分配置 → 相关性门禁」折算的锚点
 _DEFAULT_MIN_SCORE = float(Settings.model_fields["recall_min_score"].default)
 _DEFAULT_MIN_SCORE_NO_LEXICAL = float(
     Settings.model_fields["recall_min_score_no_lexical"].default
 )
 
 
-def _legacy_rel_floor(score_floor: float, default: float) -> float | None:
-    """把旧的「绝对分门禁」配置换算到相关性空间。
+# --- 向后兼容别名 ---------------------------------------------------------
+# 这些名字以前定义在本模块，测试与示例仍按旧名导入。实现已迁到 app/memory/gate.py。
+_tokenize = tokenize
+_lexical_similarity = lexical_similarity
+_clamp01 = clamp01
+_length_adjusted_lexical = length_adjusted_lexical
+_passes_recall_gates = passes_recall_gates
+_LEX_EVIDENCE_MIN = LEX_EVIDENCE_MIN
 
-    score = base × (0.15 + 0.85·rel) ⇒ rel = (score - 0.15) / 0.85。
-    - `<= 0`    → 0.0（显式关闭这一档门禁）
-    - 等于默认值 → None（表示「改用新的相关性默认值」）
-    - 其他      → 按上式换算，保证老配置的严格度语义不变
-    """
-    if score_floor <= 0:
-        return 0.0
-    if abs(score_floor - default) < 1e-9:
-        return None
-    return max(0.0, (score_floor - 0.15) / 0.85)
-
-
-# 判定「有词法证据」的最小值：低于此视为零词法（从严门禁）。
-# 长文二次折扣后零星命中的 lex 会掉到这以下，从而被归入从严档。
-_LEX_EVIDENCE_MIN = 0.02
-
-
-def _length_adjusted_lexical(lex: float, content_len: int, full_credit_len: int) -> float:
-    """长文里「命中一个词」是弱证据：超过 full_credit_len 后按长度**二次**折扣。
-
-    不折扣的话，一条几千字的「大杂烩」记忆会与几乎所有查询产生词法重叠，
-    从而绕过词法门禁（2026-10-08 hermes-user 实测：2920 字 sync_turn 镜像长文
-    对 6/8 个无关查询都产生了词法重叠）。二次折扣保证长文里的零星命中
-    掉到 _LEX_EVIDENCE_MIN 以下，归入「零词法」从严门禁。
-    """
-    if full_credit_len <= 0 or content_len <= full_credit_len:
-        return lex
-    ratio = full_credit_len / content_len
-    return lex * ratio * ratio
-
-
-def _passes_recall_gates(
-    *,
-    score: float,
-    relevance: float = 0.0,
-    lexical: float,
-    min_score: float,
-    min_score_no_lexical: float,
-    mode: str = "relevance",
-) -> bool:
-    """Recall gate.
-
-    mode="relevance"（默认）：只判相关性，与记忆年龄解耦。score 含 exp(-λ·age)，
-    卡绝对分会让 age > ~28 天的记忆永远召不回（2026-10-08 实测全库召回为空）。
-    mode="score"：旧行为（绝对分门禁），保留作回滚开关。
-    """
-    if mode == "score":
-        if min_score > 0 and score < min_score:
-            return False
-        if lexical <= 0 and min_score_no_lexical > 0 and score < min_score_no_lexical:
-            return False
-        return True
-    # 零词法重叠 → 用更严的相关性门槛（挡纯向量蹭分，如「服务器配置」）
-    has_lex = lexical >= _LEX_EVIDENCE_MIN
-    floor = min_score if has_lex else min_score_no_lexical
-    return relevance >= floor

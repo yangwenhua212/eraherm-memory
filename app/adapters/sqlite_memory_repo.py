@@ -5,15 +5,16 @@ from __future__ import annotations
 
 from typing import Optional, Sequence
 
-from sqlmodel import Session, SQLModel, col, create_engine, select
+from sqlmodel import Session, SQLModel, col, select
+from sqlalchemy import func, update
 
+from app.db import create_sqlite_engine
 from app.models import MemoryRow, SessionRow
 
 
 class SqliteMemoryRepository:
     def __init__(self, database_url: str) -> None:
-        connect_args = {"check_same_thread": False} if database_url.startswith("sqlite") else {}
-        self.engine = create_engine(database_url, connect_args=connect_args)
+        self.engine = create_sqlite_engine(database_url)
         SQLModel.metadata.create_all(self.engine)
 
     def session(self) -> Session:
@@ -76,6 +77,134 @@ class SqliteMemoryRepository:
             db.refresh(merged)
             db.expunge(merged)
             return merged
+
+    # --- 定向单语句更新 ---------------------------------------------------
+    # 下面三个方法替代「读整行 → 改字段 → merge 回写」。
+    # 后者在并发下会丢更新：recall 线程读到 weight=1.0，feedback 线程改成 1.5，
+    # recall 再 merge 整行 → weight 被打回 1.0。整行回写 = 用陈旧快照覆盖别的写者。
+
+    def bump_access(self, memory_ids: Sequence[str], accessed_at: str) -> int:
+        """一条 UPDATE 累加访问计数与时间，不整行回写。"""
+        ids = [m for m in memory_ids if m]
+        if not ids:
+            return 0
+        stmt = (
+            update(MemoryRow)
+            .where(MemoryRow.id.in_(ids), col(MemoryRow.deleted_at).is_(None))
+            .values(access_count=MemoryRow.access_count + 1, last_accessed_at=accessed_at)
+        )
+        with self.session() as db:
+            result = db.execute(stmt)
+            db.commit()
+            return int(result.rowcount or 0)
+
+    def add_weight(
+        self,
+        memory_ids: Sequence[str],
+        *,
+        delta: float,
+        updated_at: str,
+        min_weight: float = 0.05,
+        max_weight: float = 3.0,
+    ) -> int:
+        """一条 UPDATE 做带夹取的权重增减（反馈点赞/点踩）。"""
+        ids = [m for m in memory_ids if m]
+        if not ids or delta == 0:
+            return 0
+        stmt = (
+            update(MemoryRow)
+            .where(MemoryRow.id.in_(ids), col(MemoryRow.deleted_at).is_(None))
+            .values(
+                weight=func.max(min_weight, func.min(max_weight, MemoryRow.weight + delta)),
+                updated_at=updated_at,
+            )
+        )
+        with self.session() as db:
+            result = db.execute(stmt)
+            db.commit()
+            return int(result.rowcount or 0)
+
+    def set_weight(self, memory_id: str, *, weight: float, updated_at: str) -> int:
+        """只改 weight/updated_at 两列（整理重排用）。"""
+        if not memory_id:
+            return 0
+        stmt = (
+            update(MemoryRow)
+            .where(MemoryRow.id == memory_id, col(MemoryRow.deleted_at).is_(None))
+            .values(weight=weight, updated_at=updated_at)
+        )
+        with self.session() as db:
+            result = db.execute(stmt)
+            db.commit()
+            return int(result.rowcount or 0)
+
+    def set_weights_bulk(self, updates: Sequence[tuple[str, float, str]]) -> int:
+        """批量权重更新：一个连接、一个事务（不要逐行 commit）。"""
+        rows = [(mid, float(weight), ts) for mid, weight, ts in updates if mid]
+        if not rows:
+            return 0
+        with self.session() as db:
+            for mid, weight, ts in rows:
+                db.execute(
+                    update(MemoryRow)
+                    .where(MemoryRow.id == mid, col(MemoryRow.deleted_at).is_(None))
+                    .values(weight=weight, updated_at=ts)
+                )
+            db.commit()
+        return len(rows)
+
+    def supersede(
+        self, memory_ids: Sequence[str], *, superseded_by: str, superseded_at: str
+    ) -> int:
+        ids = [m for m in memory_ids if m and m != superseded_by]
+        if not ids:
+            return 0
+        stmt = (
+            update(MemoryRow)
+            .where(MemoryRow.id.in_(ids), col(MemoryRow.deleted_at).is_(None))
+            .values(
+                superseded_by=superseded_by,
+                superseded_at=superseded_at,
+                updated_at=superseded_at,
+            )
+        )
+        with self.session() as db:
+            result = db.execute(stmt)
+            db.commit()
+            return int(result.rowcount or 0)
+
+    def list_deleted_by_user(
+        self, user_id: str, *, limit: int | None = None
+    ) -> list[MemoryRow]:
+        with self.session() as db:
+            stmt = (
+                select(MemoryRow)
+                .where(
+                    MemoryRow.user_id == user_id,
+                    col(MemoryRow.deleted_at).is_not(None),
+                )
+                .order_by(col(MemoryRow.deleted_at).desc())
+            )
+            if limit is not None:
+                stmt = stmt.limit(limit)
+            rows = list(db.exec(stmt).all())
+            for row in rows:
+                db.expunge(row)
+            return rows
+
+    def restore_memories(self, memory_ids: Sequence[str]) -> int:
+        ids = [m for m in memory_ids if m]
+        if not ids:
+            return 0
+        stmt = (
+            update(MemoryRow)
+            .where(MemoryRow.id.in_(ids), col(MemoryRow.deleted_at).is_not(None))
+            .values(deleted_at=None)
+        )
+        with self.session() as db:
+            result = db.execute(stmt)
+            db.commit()
+            return int(result.rowcount or 0)
 
     def list_active_by_user(
         self,

@@ -208,7 +208,24 @@
     });
 
     function setStatus(el, msg, ok = true) {
-      el.innerHTML = `<span class="${ok ? "ok" : "err"}">${msg}</span>`;
+      // 必须用 textContent：msg 里可能带记忆原文/实体名（都由用户可写的数据拼成），
+      // innerHTML 会把它变成存储型 XSS。需要换行的调用方请改用 setStatusLines()。
+      el.textContent = "";
+      const span = document.createElement("span");
+      span.className = ok ? "ok" : "err";
+      span.textContent = msg;
+      el.appendChild(span);
+    }
+
+    function setStatusLines(el, lines, ok = true) {
+      const [head, ...rest] = lines;
+      setStatus(el, head, ok);
+      const span = el.querySelector("span");
+      for (const line of rest) {
+        if (!span) break;
+        span.appendChild(document.createElement("br"));
+        span.appendChild(document.createTextNode(line));
+      }
     }
 
     async function extract() {
@@ -219,7 +236,10 @@
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error?.message || res.statusText);
-      setStatus($("gStatus"), `抽取完成：${data.entities} 实体 / ${data.relations} 关系<br/>${(data.relation_summaries || []).join("<br/>")}`);
+      setStatusLines($("gStatus"), [
+        `抽取完成：${data.entities} 实体 / ${data.relations} 关系`,
+        ...(data.relation_summaries || []),
+      ]);
     }
 
     function renderImpact(data) {
@@ -284,8 +304,10 @@
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error?.message || res.statusText);
-      setStatus($("gStatus"), `影响面：seed=${data.seed.name}，paths=${data.paths.length}` +
-        (data.recommendations?.length ? `，推荐 ${data.recommendations.length} 条` : ""));
+      setStatusLines($("gStatus"), [
+        `影响面：seed=${data.seed.name}，paths=${data.paths.length}` +
+          (data.recommendations?.length ? `，推荐 ${data.recommendations.length} 条` : ""),
+      ]);
       renderImpact(data);
     }
 
@@ -304,7 +326,10 @@
       if (!res.ok) throw new Error(data?.error?.message || res.statusText);
       lastMemoryId = data.id;
       const alerts = (data.alerts || []).map((a) => a.message).join("；");
-      setStatus($("seedInfo"), `已写入 memory_id=${data.id} layer=${data.layer}` + (alerts ? `<br/>alerts: ${alerts}` : ""));
+      setStatusLines($("seedInfo"), [
+        `已写入 memory_id=${data.id} layer=${data.layer}`,
+        ...(alerts ? [`alerts: ${alerts}`] : []),
+      ]);
     }
 
     async function sendFeedback(type) {
@@ -324,10 +349,15 @@
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error?.message || res.statusText);
       const ref = data.reflection;
-      const msg = ref
-        ? `feedback=${data.feedback_id}<br/>status=${ref.status} conf=${ref.confidence}<br/>summary=${ref.summary}<br/>derived=${ref.derived_memory_id || "-"}`
-        : `feedback=${data.feedback_id}（upvote，无 reflection）`;
-      setStatus($("fStatus"), msg);
+      const lines = ref
+        ? [
+            `feedback=${data.feedback_id}`,
+            `status=${ref.status} conf=${ref.confidence}`,
+            `summary=${ref.summary}`,
+            `derived=${ref.derived_memory_id || "-"}`,
+          ]
+        : [`feedback=${data.feedback_id}（upvote，无 reflection）`];
+      setStatusLines($("fStatus"), lines);
     }
 
     async function recall() {

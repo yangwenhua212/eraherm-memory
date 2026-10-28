@@ -36,7 +36,13 @@ def start_consolidation_scheduler(
 
     def _job() -> None:
         try:
-            reports = consolidation.run_all()
+            # consolidate_all 带跨进程锁：多 worker 部署时只有一个进程真正执行，
+            # 其余进程记一条 skipped 后返回（以前每个 worker 各跑一遍 → 重复摘要 + 重复删原文）。
+            reports = consolidation.consolidate_all()
+            skipped = [r for r in reports if r.skipped_reason]
+            if skipped and len(skipped) == len(reports):
+                logger.info("consolidation_skipped reason=%s", skipped[0].skipped_reason)
+                return
             logger.info(
                 "consolidation_done users=%s forgotten=%s compressed=%s",
                 len(reports),

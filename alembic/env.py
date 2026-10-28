@@ -24,7 +24,14 @@ from app.models import (  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # disable_existing_loggers=False 是必须的，不是可选风格：
+    # fileConfig 默认会**禁用进程里已存在的所有 logger**（不在 ini 里列出的那些）。
+    # 本项目是「可嵌入内核」：宿主程序一旦以编程方式跑 `alembic upgrade`，
+    # 就会在那一刻把宿主自己的日志（以及我们自己的 "eraherm" logger）全部静默关掉，
+    # 表现是"之后再也打不出任何日志"。
+    # 这条缺陷是跑全量测试时暴露的：test_migration_schema 跑在 test_proclock 之前，
+    # 于是后者的 caplog 什么都收不到（单跑该文件却正常）。
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = SQLModel.metadata
 

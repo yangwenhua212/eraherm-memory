@@ -33,8 +33,13 @@ def create_mcp():
     try:
         from mcp.server.fastmcp import FastMCP
     except ImportError as exc:  # pragma: no cover
+        # 区分"没装"和"装错版本"：mcp 2.x 把 FastMCP 改名成 MCPServer，
+        # 本项目的 v1 代码在 2.x 上不可用（pyproject 里已 pin `mcp>=1.9.0,<2`）。
+        # 只报 "extra required" 会让已经装过 2.x 的人原地打转。
         raise SystemExit(
-            "MCP extra required: pip install 'eraherm-memory[mcp]'"
+            "MCP SDK 不可用：pip install 'eraherm-memory[mcp]'"
+            "（本项目需要 mcp 1.x；mcp 2.x 把 FastMCP 改名为 MCPServer，不兼容。"
+            f"底层原因：{exc}）"
         ) from exc
 
     mcp = FastMCP(
@@ -50,6 +55,9 @@ def create_mcp():
 
         def _post(path: str, payload: dict[str, Any]) -> dict[str, Any]:
             headers = {"Content-Type": "application/json"}
+            api_token = os.getenv("ERAHERM_API_TOKEN")
+            if api_token:
+                headers["X-API-Token"] = api_token
             admin_token = os.getenv("ERAHERM_ADMIN_TOKEN")
             if admin_token:
                 headers["X-Admin-Token"] = admin_token
@@ -174,6 +182,9 @@ def create_mcp():
                     "id": result.id,
                     "layer": result.layer,
                     "pinned": result.pinned,
+                    # 重要度不足且没有 session_id 时不会落库 —— 必须让模型看得见
+                    "persisted": result.persisted,
+                    "drop_reason": result.drop_reason,
                     "alerts": [
                         {
                             "type": a.type,
@@ -260,15 +271,20 @@ def create_mcp():
             return json.dumps(payload, ensure_ascii=False)
 
         @mcp.tool()
-        def consolidate(user_id: str | None = None) -> str:
-            """Run memory consolidation (reweight / compress / conflict forget) for one user or all."""
+        def consolidate(user_id: str | None = None, dry_run: bool = False) -> str:
+            """Run memory consolidation (reweight / compress / conflict forget) for one user or all.
+
+            Destructive: pass dry_run=True first to see what would change. Reports include
+            `skipped_reason` when another process holds the consolidation lock.
+            """
             svc = _c().consolidation_service
             if svc is None:
                 return json.dumps({"error": "consolidation unavailable"})
             if user_id:
-                reports = [svc.run_for_user(user_id)]
+                reports = [svc.run_for_user(user_id, dry_run=dry_run)]
             else:
-                reports = svc.run_all()
+                # 跨进程互斥（多 worker / 与 scheduler 同时跑）
+                reports = svc.consolidate_all(dry_run=dry_run)
             return json.dumps([r.to_dict() for r in reports], ensure_ascii=False)
 
         @mcp.tool()

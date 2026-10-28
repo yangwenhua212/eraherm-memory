@@ -47,6 +47,97 @@ class FakeMemoryRepository:
         self.memories[memory.id] = memory.model_copy(deep=True)
         return self.memories[memory.id].model_copy(deep=True)
 
+    def _live(self, memory_id: str) -> Optional[MemoryRow]:
+        row = self.memories.get(memory_id)
+        if row is None or row.deleted_at is not None:
+            return None
+        return row
+
+    def bump_access(self, memory_ids: Sequence[str], accessed_at: str) -> int:
+        count = 0
+        for mid in memory_ids:
+            row = self._live(mid)
+            if row is None:
+                continue
+            row.access_count = int(row.access_count or 0) + 1
+            row.last_accessed_at = accessed_at
+            count += 1
+        return count
+
+    def add_weight(
+        self,
+        memory_ids: Sequence[str],
+        *,
+        delta: float,
+        updated_at: str,
+        min_weight: float = 0.05,
+        max_weight: float = 3.0,
+    ) -> int:
+        if delta == 0:
+            return 0
+        count = 0
+        for mid in memory_ids:
+            row = self._live(mid)
+            if row is None:
+                continue
+            row.weight = max(min_weight, min(max_weight, row.weight + delta))
+            row.updated_at = updated_at
+            count += 1
+        return count
+
+    def set_weight(self, memory_id: str, *, weight: float, updated_at: str) -> int:
+        row = self._live(memory_id)
+        if row is None:
+            return 0
+        row.weight = weight
+        row.updated_at = updated_at
+        return 1
+
+    def set_weights_bulk(self, updates: Sequence[tuple[str, float, str]]) -> int:
+        count = 0
+        for mid, weight, ts in updates:
+            count += self.set_weight(mid, weight=float(weight), updated_at=ts)
+        return count
+
+    def supersede(
+        self, memory_ids: Sequence[str], *, superseded_by: str, superseded_at: str
+    ) -> int:
+        count = 0
+        for mid in memory_ids:
+            if not mid or mid == superseded_by:
+                continue
+            row = self._live(mid)
+            if row is None:
+                continue
+            row.superseded_by = superseded_by
+            row.superseded_at = superseded_at
+            row.updated_at = superseded_at
+            count += 1
+        return count
+
+    def list_deleted_by_user(
+        self, user_id: str, *, limit: int | None = None
+    ) -> list[MemoryRow]:
+        rows = [
+            m
+            for m in self.memories.values()
+            if m.user_id == user_id and m.deleted_at is not None
+        ]
+        rows.sort(key=lambda m: m.deleted_at or "", reverse=True)
+        if limit is not None:
+            rows = rows[:limit]
+        return [m.model_copy(deep=True) for m in rows]
+
+    def restore_memories(self, memory_ids: Sequence[str]) -> int:
+        count = 0
+        for mid in memory_ids:
+            row = self.memories.get(mid)
+            if row is None or row.deleted_at is None:
+                continue
+            row.deleted_at = None
+            count += 1
+        return count
+
     def list_active_by_user(
         self,
         user_id: str,

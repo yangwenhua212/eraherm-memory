@@ -14,4 +14,9 @@ class EmbeddingClient(Protocol):
     @property
     def dimensions(self) -> int: ...
 
+    @property
+    def is_remote(self) -> bool:
+        """True = 文本会离开本机（远端 API）。用于敏感内容的 fail-closed 判定。"""
+        ...
+
     def embed(self, texts: Sequence[str]) -> list[list[float]]: ...

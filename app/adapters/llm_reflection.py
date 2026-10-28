@@ -35,8 +35,12 @@ class LLMReflectionPipeline:
         answer_text: str | None,
         related_contents: Sequence[str],
     ) -> ReflectionDraft:
-        # 敏感内容绝不外发（LLM 反射 = 内容出网）：直接走启发式
-        probe = " ".join(related_contents) + " " + (correction_text or "")
+        # 敏感内容绝不外发（LLM 反射 = 内容出网）：直接走启发式。
+        # probe 必须覆盖**所有**会进入 prompt 的字段 —— 以前漏了 answer_text，
+        # 于是「answer_text 里带秘密、correction_text 干净」就能把敏感原文送出去。
+        probe = " ".join(
+            [*related_contents, correction_text or "", answer_text or ""]
+        )
         if contains_sensitive(probe):
             return self._fallback.reflect(
                 feedback_type=feedback_type,

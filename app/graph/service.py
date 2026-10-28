@@ -169,5 +169,19 @@ class GraphService:
             max_hops=max_hops,
             direction=direction,
             tenant_id=tenant_id,
+            max_paths=self.settings.graph_max_paths,
         )
         return ImpactResult(seed=seed, paths=paths, direction=direction, max_hops=max_hops)
+
+    def invalidate_relations_for_memories(
+        self, memory_ids: list[str], *, valid_to: str | None = None
+    ) -> int:
+        """让这些记忆带出来的关系失效（纠正旧事实时调用）。
+
+        图与记忆的版本必须同步：记忆被取代了，它留下的边还活着的话，
+        impact 仍会告诉你「A 依赖 B」。
+        """
+        invalidate = getattr(self.store, "invalidate_relations_for_memories", None)
+        if not callable(invalidate):
+            return 0
+        return int(invalidate(list(memory_ids), valid_to=valid_to) or 0)

@@ -82,6 +82,7 @@ class ProactiveService:
             query=query_vec,
             user_id=user_id,
             top_k=max(self.settings.alert_neighbor_k, 5),
+            tenant_id=tenant_id,
         )
         rows = self._rows_for_hits(hits, tenant_id=tenant_id)
         for hit in hits:
@@ -152,6 +153,7 @@ class ProactiveService:
             query=query_vec,
             user_id=user_id,
             top_k=max(top_k * 3, 10),
+            tenant_id=tenant_id,
         )
         rows = self._rows_for_hits(hits, tenant_id=tenant_id)
 

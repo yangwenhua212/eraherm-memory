@@ -3,10 +3,11 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Header, Query, Request
+from fastapi import APIRouter, Depends, Header, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from app import __version__
+from app.api.auth import require_api_token
 from app.api.schemas import (
     CloseSessionResponse,
     ConsolidateRequest,
@@ -42,6 +43,10 @@ from app.api.schemas import (
     ReembedResponse,
     RememberRequest,
     RememberResponse,
+    RestoreArchiveRequest,
+    RestoreArchiveResponse,
+    RestoreMemoriesRequest,
+    RestoreMemoriesResponse,
     SessionResponse,
     WatchdogItemOut,
     WatchdogRequest,
@@ -53,9 +58,12 @@ from app.feedback.service import FeedbackService
 from app.graph.service import GraphService
 from app.memory.service import MemoryService
 from app.observability.metrics import METRICS
+from app.security import token_is_configured, tokens_equal
 from app.watchdog.service import WatchdogService
 
-router = APIRouter(prefix="/v1")
+# 认证在 router 层统一挂载：/v1/health 由 require_api_token 内部豁免。
+# ERAHERM_API_TOKEN 未配置时不启用（此时启动守卫已保证只绑回环，见 app/main.py）。
+router = APIRouter(prefix="/v1", dependencies=[Depends(require_api_token)])
 
 
 def _svc(request: Request) -> MemoryService:
@@ -79,9 +87,22 @@ def _consolidate(request: Request) -> ConsolidationService | None:
 
 
 def _require_admin(request: Request, token: str | None) -> JSONResponse | None:
-    expected = getattr(request.app.state, "settings", None)
-    admin = expected.admin_token if expected is not None else "dev-admin-token"
-    if not token or token != admin:
+    """管理端点校验（fail-closed）。
+
+    两个刻意的行为变更（0.10.2）：
+    1. **不再有默认口令**。以前 ``settings`` 缺失时会 fallback 到 ``"dev-admin-token"``，
+       等于给了一个公开可猜的后门；现在未配置直接 503，永不接受占位值。
+    2. 比较改用 ``secrets.compare_digest``（恒定时间），避免按字节试探。
+    """
+    settings = getattr(request.app.state, "settings", None)
+    admin = getattr(settings, "admin_token", None)
+    if not token_is_configured(admin):
+        return _err(
+            503,
+            "admin_disabled",
+            "admin endpoints disabled: set ERAHERM_ADMIN_TOKEN to a real secret",
+        )
+    if not tokens_equal(token, admin):
         return _err(401, "unauthorized", "invalid admin token")
     return None
 
@@ -136,11 +157,17 @@ def create_session(
 
 
 @router.post("/sessions/{session_id}/close", response_model=CloseSessionResponse)
-def close_session(session_id: str, request: Request) -> CloseSessionResponse | JSONResponse:
+def close_session(
+    session_id: str,
+    request: Request,
+    x_user_id: str | None = Header(default=None, alias="X-User-Id"),
+) -> CloseSessionResponse | JSONResponse:
     try:
-        result = _svc(request).close_session(session_id)
+        result = _svc(request).close_session(session_id, user_id=x_user_id)
     except KeyError as exc:
         return _err(404, "not_found", str(exc))
+    except PermissionError as exc:
+        return _err(403, "forbidden", str(exc))
     except ValueError as exc:
         return _err(409, "conflict", str(exc))
     return CloseSessionResponse(
@@ -157,21 +184,27 @@ def remember(
     request: Request,
     x_user_id: str | None = Header(default=None, alias="X-User-Id"),
     x_tenant_id: str | None = Header(default=None, alias="X-Tenant-Id"),
-) -> RememberResponse:
+) -> RememberResponse | JSONResponse:
     user_id = body.user_id or x_user_id
     tenant_id = body.tenant_id or x_tenant_id
-    result = _svc(request).remember(
-        content=body.content,
-        user_id=user_id,
-        tenant_id=tenant_id,
-        session_id=body.session_id,
-        memory_type=body.memory_type,
-        importance=body.importance,
-        pinned=body.pinned,
-        extract_graph=body.extract_graph,
-        meta=body.meta,
-    )
+    try:
+        result = _svc(request).remember(
+            content=body.content,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            session_id=body.session_id,
+            memory_type=body.memory_type,
+            importance=body.importance,
+            pinned=body.pinned,
+            extract_graph=body.extract_graph,
+            meta=body.meta,
+        )
+    except ValueError as exc:
+        # 例：远端 embedding + 敏感内容 → 拒绝把正文外发（fail-closed）
+        return _err(400, "validation_error", str(exc))
     METRICS.incr("remember_total")
+    if not result.persisted:
+        METRICS.incr("remember_not_persisted_total")
     return RememberResponse(
         id=result.id,
         layer=result.layer,
@@ -187,6 +220,8 @@ def remember(
             )
             for a in result.alerts
         ],
+        persisted=result.persisted,
+        drop_reason=result.drop_reason,
     )
 
 
@@ -200,7 +235,9 @@ def pin_memory(
     svc = _svc(request)
     try:
         if body.memory_id:
-            row = svc.pin_existing(body.memory_id, pinned=body.pinned)
+            row = svc.pin_existing(
+                body.memory_id, pinned=body.pinned, user_id=body.user_id or x_user_id
+            )
             return RememberResponse(id=row.id, layer="L2", pinned=row.pinned)
         user_id = body.user_id or x_user_id
         if not user_id or not body.content:
@@ -220,25 +257,33 @@ def pin_memory(
             pinned=result.pinned,
             entities_extracted=result.entities_extracted,
             relations_extracted=result.relations_extracted,
+            persisted=result.persisted,
+            drop_reason=result.drop_reason,
         )
     except KeyError as exc:
         return _err(404, "not_found", str(exc))
+    except PermissionError as exc:
+        return _err(403, "forbidden", str(exc))
     except ValueError as exc:
         return _err(400, "validation_error", str(exc))
 
 
 @router.post("/recall", response_model=RecallResponse)
-def recall(body: RecallRequest, request: Request) -> RecallResponse:
+def recall(body: RecallRequest, request: Request) -> RecallResponse | JSONResponse:
     svc = _svc(request)
-    items = svc.recall(
-        user_id=body.user_id,
-        query=body.query,
-        session_id=body.session_id,
-        tenant_id=body.tenant_id,
-        top_k=body.top_k,
-        include_pinned=body.include_pinned,
-        min_score=body.min_score,
-    )
+    try:
+        items = svc.recall(
+            user_id=body.user_id,
+            query=body.query,
+            session_id=body.session_id,
+            tenant_id=body.tenant_id,
+            top_k=body.top_k,
+            include_pinned=body.include_pinned,
+            min_score=body.min_score,
+        )
+    except ValueError as exc:
+        # 例：查询里含敏感内容 + 远端 embedding → 拒绝外发
+        return _err(400, "validation_error", str(exc))
     recs = svc.recommend_sidecar(
         user_id=body.user_id,
         query=body.query,
@@ -450,6 +495,10 @@ def admin_consolidate(
     request: Request,
     x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
 ) -> ConsolidateResponse | JSONResponse:
+    """整理记忆（破坏性）。先用 ``dry_run: true`` 看会动什么。
+
+    跨进程互斥：整库整理走 ``consolidate_all``（带文件锁），多 worker 时只有一个进程执行。
+    """
     denied = _require_admin(request, x_admin_token)
     if denied is not None:
         return denied
@@ -457,10 +506,14 @@ def admin_consolidate(
     if svc is None:
         return _err(503, "unavailable", "consolidation service not configured")
     if body.user_id:
-        reports = [svc.run_for_user(body.user_id, tenant_id=body.tenant_id)]
+        reports = [
+            svc.run_for_user(body.user_id, tenant_id=body.tenant_id, dry_run=body.dry_run)
+        ]
     else:
-        reports = svc.run_all(tenant_id=body.tenant_id)
+        reports = svc.consolidate_all(tenant_id=body.tenant_id, dry_run=body.dry_run)
     METRICS.incr("consolidate_total")
+    if body.dry_run:
+        METRICS.incr("consolidate_dry_run_total")
     return ConsolidateResponse(
         reports=[
             ConsolidateUserReport(
@@ -472,9 +525,72 @@ def admin_consolidate(
                 conflicts_resolved=r.conflicts_resolved,
                 summary_memory_ids=r.summary_memory_ids,
                 details=r.details,
+                dry_run=r.dry_run,
+                skipped_reason=r.skipped_reason,
+                archive_id=r.archive_id,
             )
             for r in reports
         ]
+    )
+
+
+@router.post("/admin/memories/restore", response_model=RestoreMemoriesResponse)
+def admin_restore_memories(
+    body: RestoreMemoriesRequest,
+    request: Request,
+    x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
+) -> RestoreMemoriesResponse | JSONResponse:
+    """恢复被软删的记忆（整理误删的兜底出口）。
+
+    以前整理会软删冲突/低权重条目，而**没有任何恢复接口** —— 误判就只能手改数据库。
+    """
+    denied = _require_admin(request, x_admin_token)
+    if denied is not None:
+        return denied
+    mem = _svc(request)
+    ids = list(body.memory_ids)
+    if not ids:
+        if not body.user_id:
+            return _err(
+                400,
+                "validation_error",
+                "provide memory_ids, or user_id to restore that user's most recent deletions",
+            )
+        deleted = mem.repo.list_deleted_by_user(body.user_id, limit=body.limit)
+        ids = [row.id for row in deleted]
+    if not ids:
+        return RestoreMemoriesResponse(restored=0, memory_ids=[])
+    restored = mem.restore_memories(ids)
+    METRICS.incr("restore_total")
+    return RestoreMemoriesResponse(restored=restored, memory_ids=ids)
+
+
+@router.post("/admin/l3/restore", response_model=RestoreArchiveResponse)
+def admin_l3_restore(
+    body: RestoreArchiveRequest,
+    request: Request,
+    x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
+) -> RestoreArchiveResponse | JSONResponse:
+    """从 L3 归档 JSON 恢复记忆（只补缺失的，不覆盖已存在的）。
+
+    l3 dump 以前是「只写不读」的单向操作，等于没有备份。
+    """
+    denied = _require_admin(request, x_admin_token)
+    if denied is not None:
+        return denied
+    try:
+        report = _l3(request).restore(body.archive_id)
+    except KeyError as exc:
+        return _err(404, "not_found", str(exc))
+    except ValueError as exc:
+        return _err(400, "validation_error", str(exc))
+    METRICS.incr("l3_restore_total")
+    return RestoreArchiveResponse(
+        archive_id=body.archive_id,
+        restored_memories=report.restored_memories,
+        skipped_existing=report.skipped_existing,
+        reembedded=report.reembedded,
+        errors=report.errors,
     )
 
 

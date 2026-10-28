@@ -173,6 +173,7 @@ class ReembedService:
                         user_id=row.user_id,
                         vector=vec,
                         model=target_model,
+                        tenant_id=row.tenant_id,
                     )
                     report.reembedded += 1
                 except Exception as exc:  # noqa: BLE001

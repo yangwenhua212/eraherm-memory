@@ -51,3 +51,14 @@ def test_mcp_admin_auth_header_is_x_admin_token() -> None:
     # 2. eraherm_mcp_server.py：必须用 X-Admin-Token，禁止 Authorization: Bearer
     assert '"X-Admin-Token"' in src_cursor, "eraherm_mcp_server.py: 缺 X-Admin-Token 头"
     assert "Authorization" not in src_cursor, "eraherm_mcp_server.py: 误用 Authorization 头（后端只认 X-Admin-Token）"
+
+
+def test_mcp_forwards_api_token_when_configured() -> None:
+    """0.10.2 起 /v1/* 可能要求 X-API-Token —— 两个 MCP 转发端都要支持。
+
+    否则「服务端配了 API token」和「MCP 能用」互斥，用户只会看到 401。
+    """
+    for name in MCP_FILES:
+        src = (ROOT / name).read_text(encoding="utf-8")
+        assert "ERAHERM_API_TOKEN" in src, f"{name}: 未从 ERAHERM_API_TOKEN 读取 token"
+        assert '"X-API-Token"' in src, f"{name}: 未转发 X-API-Token 头"

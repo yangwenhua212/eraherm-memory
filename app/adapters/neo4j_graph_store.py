@@ -181,7 +181,9 @@ class Neo4jGraphStore:
                     MATCH ()-[r:REL {id: $id}]->()
                     SET r.weight = $weight,
                         r.confidence = CASE WHEN r.confidence > $confidence THEN r.confidence ELSE $confidence END,
-                        r.source_memory_id = coalesce($source_memory_id, r.source_memory_id)
+                        r.source_memory_id = coalesce($source_memory_id, r.source_memory_id),
+                        r.valid_to = null,
+                        r.valid_from = coalesce(r.valid_from, r.created_at)
                     """,
                     id=r["id"],
                     weight=weight,
@@ -196,7 +198,8 @@ class Neo4jGraphStore:
                 CREATE (a)-[r:REL {
                   id: $id, user_id: $user_id, tenant_id: $tenant_id,
                   relation_type: $relation_type, weight: $weight, confidence: $confidence,
-                  source_memory_id: $source_memory_id, created_at: $created_at, deleted_at: null
+                  source_memory_id: $source_memory_id, created_at: $created_at, deleted_at: null,
+                  valid_from: $created_at, valid_to: null
                 }]->(b)
                 """,
                 from_id=from_entity_id,
@@ -223,6 +226,27 @@ class Neo4jGraphStore:
             created_at=now,
         )
 
+    def invalidate_relations_for_memories(
+        self, memory_ids: Sequence[str], *, valid_to: str | None = None
+    ) -> int:
+        ids = [m for m in memory_ids if m]
+        if not ids:
+            return 0
+        stamp = valid_to or utc_now_iso()
+        with self._driver.session() as session:
+            result = session.run(
+                """
+                MATCH (:Entity)-[r:REL]->(:Entity)
+                WHERE r.source_memory_id IN $ids AND r.valid_to IS NULL
+                SET r.valid_to = $valid_to
+                RETURN count(r) AS n
+                """,
+                ids=ids,
+                valid_to=stamp,
+            )
+            record = result.single()
+            return int(record["n"]) if record else 0
+
     def impact_paths(
         self,
         *,
@@ -231,6 +255,7 @@ class Neo4jGraphStore:
         max_hops: int = 2,
         direction: str = "inbound",
         tenant_id: str | None = None,
+        max_paths: int = 200,
     ) -> list[GraphPath]:
         # Load subgraph into memory BFS (keeps semantics aligned with NetworkX adapter)
         entities: dict[str, EntityRow] = {}
@@ -252,6 +277,7 @@ class Neo4jGraphStore:
                 """
                 MATCH (a:Entity {user_id: $user_id})-[r:REL {user_id: $user_id}]->(b:Entity)
                 WHERE r.deleted_at IS NULL
+                  AND r.valid_to IS NULL
                   AND ($tenant_id IS NULL OR r.tenant_id = $tenant_id)
                 RETURN a.id AS from_id, b.id AS to_id, r
                 """,
@@ -292,6 +318,8 @@ class Neo4jGraphStore:
         while queue:
             nodes = queue.popleft()
             if len(nodes) - 1 >= 1:
+                if len(paths) >= max_paths:
+                    break
                 paths.append(_build_path(nodes, entities, rel_index, direction))
             if len(nodes) - 1 >= max_hops:
                 continue
@@ -300,7 +328,7 @@ class Neo4jGraphStore:
                     continue
                 queue.append(nodes + [nxt])
         paths.sort(key=lambda p: (p.hops, p.nodes[-1].name if p.nodes else ""))
-        return paths
+        return paths[:max_paths]
 
 
 def _entity_from_node(e) -> EntityRow:

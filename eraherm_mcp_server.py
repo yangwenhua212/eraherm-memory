@@ -35,10 +35,16 @@ from typing import Any
 _API_BASE = os.getenv("ERAHERM_API_URL", "http://127.0.0.1:8000").rstrip("/")
 _DEFAULT_USER = os.getenv("ERAHERM_USER_ID", "cursor:user")
 _ADMIN_TOKEN = os.getenv("ERAHERM_ADMIN_TOKEN", "")
+# 服务端配了 ERAHERM_API_TOKEN 时，除 /v1/health 外都要带这个头。
+# 刻意只走 X-API-Token / X-Admin-Token 两个自定义头（本文件不引入 Bearer 头，
+# 见 tests/test_mcp_paths.py 的断言）。
+_API_TOKEN = os.getenv("ERAHERM_API_TOKEN", "")
 
 
 def _headers() -> dict[str, str]:
     h = {"Content-Type": "application/json"}
+    if _API_TOKEN:
+        h["X-API-Token"] = _API_TOKEN
     if _ADMIN_TOKEN:
         h["X-Admin-Token"] = _ADMIN_TOKEN
     return h
@@ -80,8 +86,12 @@ def create_mcp():
     try:
         from mcp.server.fastmcp import FastMCP
     except ImportError as exc:
+        # 本项目需要 mcp 1.x（pyproject pin 了 `mcp>=1.9.0,<2`）；
+        # mcp 2.x 把 FastMCP 改名为 MCPServer，v1 代码在 2.x 上不可用。
         raise SystemExit(
-            "需要 mcp SDK：pip install 'mcp>=1.9.0'"
+            "mcp SDK 不可用：pip install 'eraherm-memory[mcp]'"
+            "（需要 mcp 1.x；mcp 2.x 不兼容。"
+            f"底层原因：{exc}）"
         ) from exc
 
     mcp = FastMCP(

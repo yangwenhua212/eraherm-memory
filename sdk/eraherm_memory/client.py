@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import httpx
@@ -17,9 +18,20 @@ class MemoryClient:
         *,
         timeout: float = 30.0,
         headers: dict[str, str] | None = None,
+        api_token: str | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
-        self._client = httpx.Client(base_url=self.base_url, timeout=timeout, headers=headers or {})
+        merged = dict(headers or {})
+        # 服务端配了 ERAHERM_API_TOKEN 时，/v1/* 除 health 外都要带 X-API-Token。
+        # 允许显式传参，否则回落到环境变量（MCP/SDK 与 uvicorn 共用同一份 .env）。
+        # 这里刻意不引入 app.* —— SDK 保持"薄客户端"，服务端才是校验占位口令的一方。
+        token = api_token if api_token is not None else os.getenv("ERAHERM_API_TOKEN")
+        token = (token or "").strip()
+        if token and not any(
+            k.lower() in {"x-api-token", "authorization"} for k in merged
+        ):
+            merged["X-API-Token"] = token
+        self._client = httpx.Client(base_url=self.base_url, timeout=timeout, headers=merged)
 
     def close(self) -> None:
         self._client.close()

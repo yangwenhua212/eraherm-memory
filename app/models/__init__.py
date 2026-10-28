@@ -59,6 +59,7 @@ class MemoryRow(SQLModel, table=True):
     __table_args__ = (
         Index("ix_memories_user_pinned_deleted", "user_id", "pinned", "deleted_at"),
         Index("ix_memories_session_id", "session_id"),
+        Index("ix_memories_user_superseded", "user_id", "superseded_by"),
     )
 
     id: str = Field(default_factory=lambda: new_id("mem"), primary_key=True)
@@ -78,16 +79,31 @@ class MemoryRow(SQLModel, table=True):
     last_accessed_at: Optional[str] = None
     access_count: int = Field(default=0)
     deleted_at: Optional[str] = Field(default=None, index=True)
+    # --- 版本/取代链（ADR 0013）------------------------------------------------
+    # 「纠正即进化」以前只是「新增一条 pinned + 把旧条 weight 减 0.1」，
+    # 旧错仍在库里、仍可能被召回，而且没有任何数据结构表达「这条被那条取代了」。
+    # 现在纠正会把被取代的记忆打上 superseded_by / superseded_at，
+    # 召回默认跳过已取代的条目（见 ERAHERM_RECALL_EXCLUDE_SUPERSEDED），
+    # 但**不删除**它 —— 历史仍可审计、可回滚。
+    version: int = Field(default=1)
+    superseded_by: Optional[str] = Field(default=None, index=True)
+    superseded_at: Optional[str] = Field(default=None)
 
 
 class EntityRow(SQLModel, table=True):
     __tablename__ = "entities"
-    __table_args__ = (Index("ix_entities_user_name", "user_id", "name"),)
+    __table_args__ = (
+        Index("ix_entities_user_name", "user_id", "name"),
+        Index("ix_entities_user_name_norm", "user_id", "name_norm"),
+    )
 
     id: str = Field(default_factory=lambda: new_id("ent"), primary_key=True)
     tenant_id: Optional[str] = Field(default=None, index=True)
     user_id: Optional[str] = Field(default=None, index=True)
     name: str = Field(index=True)
+    #: 归一化名字（去空白 + 小写）。SQLite 端以前只能把该用户**全部实体**取回来
+    #: 在 Python 里逐个比对（name 上的索引用不上）——每次 remember 都是 O(实体数²)。
+    name_norm: Optional[str] = Field(default=None, index=True)
     entity_type: str = Field(default="other", index=True)
     aliases_json: str = Field(default="[]", sa_column=Column(Text))
     meta_json: str = Field(default="{}", sa_column=Column(Text))
@@ -100,6 +116,7 @@ class RelationRow(SQLModel, table=True):
     __table_args__ = (
         Index("ix_relations_from", "from_entity_id"),
         Index("ix_relations_to", "to_entity_id"),
+        Index("ix_relations_valid_to", "valid_to"),
     )
 
     id: str = Field(default_factory=lambda: new_id("rel"), primary_key=True)
@@ -113,6 +130,11 @@ class RelationRow(SQLModel, table=True):
     source_memory_id: Optional[str] = Field(default=None)
     created_at: str = Field(default_factory=utc_now_iso)
     deleted_at: Optional[str] = Field(default=None, index=True)
+    # --- 时间有效性（ADR 0013）-------------------------------------------------
+    # 以前 relations 没有有效期，无法表达「以前 A 依赖 B，现在不依赖了」。
+    # valid_to 为空 = 当前有效；被取代/失效的边保留在库里（可审计）并从 impact 查询中排除。
+    valid_from: Optional[str] = Field(default=None)
+    valid_to: Optional[str] = Field(default=None)
 
 
 class FeedbackType(StrEnum):

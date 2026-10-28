@@ -19,4 +19,11 @@ class ArchivePutResult:
 class ArchiveStore(Protocol):
     def put(self, *, relative_name: str, payload: bytes) -> ArchivePutResult: ...
 
+    def read(self, uri: str) -> bytes:
+        """按归档 URI 读回内容（l3 restore 用）。
+
+        实现必须拒绝读到归档根之外（见 FilesystemArchiveStore.read）。
+        """
+        ...
+
     def list(self) -> list[str]: ...

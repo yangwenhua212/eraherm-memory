@@ -4,8 +4,9 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Any
 
 from sqlmodel import Session, col, select
 
@@ -18,6 +19,10 @@ from app.models import (
     utc_now_iso,
 )
 from app.ports.archive_store import ArchiveStore
+from app.security import safe_filename
+
+if TYPE_CHECKING:  # pragma: no cover
+    from app.memory.service import MemoryService
 
 
 @dataclass
@@ -30,10 +35,71 @@ class L3DumpResult:
     relation_count: int
 
 
+@dataclass
+class L3RestoreResult:
+    restored_memories: int = 0
+    skipped_existing: int = 0
+    reembedded: int = 0
+    errors: list[str] = field(default_factory=list)
+
+
 class L3ArchiveService:
-    def __init__(self, *, engine, archive_store: ArchiveStore) -> None:
+    def __init__(
+        self,
+        *,
+        engine,
+        archive_store: ArchiveStore,
+        memory: "MemoryService | None" = None,
+    ) -> None:
         self.engine = engine
         self.archive_store = archive_store
+        # 恢复出来的记忆需要重新建立向量（否则只能靠词法路径召回）
+        self.memory = memory
+
+    def _get_archive(self, archive_id: str) -> L3ArchiveRow:
+        with Session(self.engine) as db:
+            row = db.get(L3ArchiveRow, archive_id)
+            if row is None:
+                raise KeyError(f"archive not found: {archive_id}")
+            db.expunge(row)
+            return row
+
+    def restore(self, archive_id: str) -> L3RestoreResult:
+        """从归档 JSON 恢复记忆（只补缺失的 id，不覆盖已存在的行）。
+
+        以前 l3 dump 是「只写不读」的单向操作 —— 归档在，但没有回头路。
+        """
+        row = self._get_archive(archive_id)
+        read = getattr(self.archive_store, "read", None)
+        if not callable(read):
+            raise ValueError("archive store does not support read(); restore unavailable")
+        payload = json.loads(read(row.uri).decode("utf-8"))
+
+        result = L3RestoreResult()
+        mem_fields = set(MemoryRow.model_fields)
+        restored_ids: list[str] = []
+        with Session(self.engine) as db:
+            for item in payload.get("memories") or []:
+                if not isinstance(item, dict) or not item.get("id"):
+                    result.errors.append("skipped malformed memory entry")
+                    continue
+                if db.get(MemoryRow, item["id"]) is not None:
+                    result.skipped_existing += 1
+                    continue
+                try:
+                    data: dict[str, Any] = {
+                        k: v for k, v in item.items() if k in mem_fields
+                    }
+                    db.add(MemoryRow(**data))
+                    restored_ids.append(str(item["id"]))
+                except Exception as exc:  # noqa: BLE001
+                    result.errors.append(f"{item.get('id')}: {exc}")
+            db.commit()
+        result.restored_memories = len(restored_ids)
+
+        if restored_ids and self.memory is not None:
+            result.reembedded = self.memory.reembed_memories(restored_ids)
+        return result
 
     def dump(self, *, user_id: str | None = None) -> L3DumpResult:
         with Session(self.engine) as db:
@@ -58,7 +124,9 @@ class L3ArchiveService:
         }
         body = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        suffix = f"_{user_id}" if user_id else "_all"
+        # user_id 来自请求体，直接拼进文件名会造成路径穿越（`../../x`）。
+        # 这里只保留安全字符、去掉前导点，且 user_id 原值照常写进归档内容。
+        suffix = f"_{safe_filename(user_id)}" if user_id else "_all"
         relative = f"dump_{stamp}{suffix}.json"
         put = self.archive_store.put(relative_name=relative, payload=body)
 

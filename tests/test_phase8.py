@@ -8,6 +8,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
+
 from app.adapters.hashing_embedding import HashingEmbeddingClient
 from app.adapters.memory_session_cache import InMemorySessionCache
 from app.adapters.networkx_graph_store import NetworkXSqliteGraphStore
@@ -146,6 +148,11 @@ def test_recall_increments_access_count(tmp_path: Path):
 
 
 def test_mcp_tools_registered():
+    # mcp 是**可选** extra（pip install 'eraherm-memory[mcp]'）。
+    # 没装时应该是 skip 而不是 fail —— 与本仓库其它可选依赖测试一致
+    # （见 tests/test_phase6.py 对 fakeredis / qdrant_client 的 importorskip）。
+    # CI 装的是 ".[dev,mcp,scheduler]"，所以这条在 CI 里会真正执行。
+    pytest.importorskip("mcp", reason="MCP extra 未安装：pip install 'eraherm-memory[mcp]'")
     from app.mcp_server import create_mcp
 
     mcp = create_mcp()

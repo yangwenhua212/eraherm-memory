@@ -112,4 +112,15 @@ class GraphStore(Protocol):
         max_hops: int = 2,
         direction: str = "inbound",
         tenant_id: str | None = None,
+        max_paths: int = 200,
     ) -> list[GraphPath]: ...
+
+    def invalidate_relations_for_memories(
+        self, memory_ids: Sequence[str], *, valid_to: str | None = None
+    ) -> int:
+        """把这些记忆「带出来的」关系标记为失效（valid_to = 现在）。
+
+        用于纠正场景：旧事实被取代后，它在图里留下的边也必须失效，
+        否则 impact 仍会回答「A 依赖 B」。
+        """
+        ...

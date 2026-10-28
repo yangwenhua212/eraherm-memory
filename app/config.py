@@ -18,7 +18,9 @@ class Settings(BaseSettings):
 
     data_dir: Path = Path("./storage")
     database_url: str = "sqlite:///./storage/eraherm.db"
-    host: str = "0.0.0.0"
+    # 默认只绑定回环：这是唯一「无认证也安全」的绑定地址。
+    # 改成 0.0.0.0/:: 而没配 api_token 时启动会直接失败（见 app/security.py）。
+    host: str = "127.0.0.1"
     port: int = 8000
 
     # memory_policy
@@ -56,6 +58,8 @@ class Settings(BaseSettings):
     recall_lexical_len_norm: int = 300
     # pinned（核心记忆：身份/红线/偏好）不参与年龄衰减。
     recall_pinned_no_decay: bool = True
+    # 已取代的记忆（superseded_by 非空）是否从召回中排除。不删除、可审计，只是不再参与竞争。
+    recall_exclude_superseded: bool = True
     l1_max_items_per_session: int = 200
     extract_on_remember: bool = True
     auto_importance: bool = True
@@ -64,7 +68,9 @@ class Settings(BaseSettings):
     # graph_policy
     graph_max_hops_default: int = 2
     graph_min_extract_confidence: float = 0.5
-
+    # impact 路径枚举上限：不设上限时 max_hops=5、度 30 可枚举出 30^5 条简单路径
+    # （而 /v1/graph/impact 曾被无鉴权暴露 → 可远程触发的 DoS）。
+    graph_max_paths: int = 200
     # feedback_policy
     reflection_confidence_threshold: float = 0.7
     upvote_weight_delta: float = 0.05
@@ -81,7 +87,24 @@ class Settings(BaseSettings):
     embedding_cache_dir: Path | None = None  # fastembed model cache (optional)
 
     # ops / observability
-    admin_token: str = "dev-admin-token"
+    # 认证与暴露面（见 app/security.py 与 ADR 0012）
+    # api_token 未配置时**只有**绑定回环地址才允许启动；配了则 /v1/*（除 /v1/health）
+    # 一律要求 X-API-Token。默认空 = 单机本地开发，零配置。
+    api_token: str | None = None
+    # admin_token 默认空 = /v1/admin/* 一律返回 503（fail-closed，不再有可猜的默认值）
+    admin_token: str = ""
+    # 明确承认「我要无认证暴露到网络」才需要打开这个开关（不推荐）
+    allow_insecure_public: bool = False
+    # Demo 前端与 API 同源；生产建议关掉（它会把 API 变成一个 XSS 落地页）
+    enable_demo: bool = True
+    # /docs /redoc /openapi.json：生产建议关掉（默认开，方便本地调试）
+    enable_docs: bool = True
+    # 运行时 SQLModel.metadata.create_all：嵌入式/测试方便；生产建议 false，只走 alembic
+    auto_create_schema: bool = True
+    # 进程内令牌桶限流（多 worker 各自计数 —— 是「防误用」而不是「分布式限流」）
+    rate_limit_enabled: bool = True
+    rate_limit_per_minute: int = 600
+    rate_limit_burst: int = 120
     log_level: str = "INFO"
     json_logs: bool = True
 
@@ -124,6 +147,20 @@ class Settings(BaseSettings):
     consolidation_cluster_similarity: float = 0.45
     consolidation_max_clusters: int = 20
     consolidation_use_llm: bool = False  # heuristic summary by default
+    # 破坏性动作前的安全网：删除（软删）前先自动 L3 归档，出问题可 restore
+    consolidation_archive_before_delete: bool = True
+    # 聚类候选上限：全对全比较是 O(N²·dim)，不设上限时大库夜间任务跑不完
+    consolidation_max_candidates: int = 2000
+    # 跨进程锁的过期秒数（默认 6h）：进程崩溃后锁文件由下一个持锁者接管
+    consolidation_lock_stale_seconds: float = 21600.0
+
+    # 远端 embedding 与敏感内容（ADR 0014）：默认**拒绝把敏感正文发给远端**
+    # embedding 接口。设 false 表示你接受该风险。
+    sensitive_requires_local_embedding: bool = True
+
+    # 进程内队列 / L1 会话缓存的容量上限（防无界增长）
+    job_queue_max_size: int = 1000
+    session_cache_max_sessions: int = 2000
 
     # phase 9 watchdog (主动感知看门狗 — 零 LLM / 零外部 API)
     watchdog_scan_limit: int = 200  # 巡检的记忆条数上限

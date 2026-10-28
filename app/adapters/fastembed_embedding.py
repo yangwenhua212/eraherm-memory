@@ -66,6 +66,11 @@ class FastEmbedEmbeddingClient:
         return self._model_name
 
     @property
+    def is_remote(self) -> bool:
+        """本地 ONNX 推理，不出网（推荐给含敏感内容的部署）。"""
+        return False
+
+    @property
     def dimensions(self) -> int:
         if self._dim is None:
             raise RuntimeError("dimensions unknown")

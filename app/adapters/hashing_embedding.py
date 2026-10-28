@@ -31,6 +31,11 @@ class HashingEmbeddingClient:
         return self._model
 
     @property
+    def is_remote(self) -> bool:
+        """本地计算，不出网。"""
+        return False
+
+    @property
     def dimensions(self) -> int:
         return self._dim
 
