@@ -39,12 +39,13 @@ dev = [
   "pytest>=8.3.0",
   "fakeredis>=2.26.0",
 ]
-redis = ["redis>=5.0.0"]
-qdrant = ["qdrant-client>=1.12.0"]
-neo4j = ["neo4j>=5.26.0"]
+redis = ["redis>=5.0.0,<7"]
+qdrant = ["qdrant-client>=1.12.0,<2"]
+neo4j = ["neo4j>=5.26.0,<7"]
 mcp = ["mcp>=1.9.0,<2"]
-scheduler = ["apscheduler>=3.10.0"]
-fastembed = ["fastembed>=0.4.0"]
+# apscheduler 4.x 是不兼容重写，这里明确限制在 3.x
+scheduler = ["apscheduler>=3.10.0,<4"]
+fastembed = ["fastembed>=0.4.0,<2"]
 all = ["eraherm-memory[redis,qdrant,neo4j,mcp,scheduler,fastembed]"]
 
 [project.urls]
@@ -68,6 +69,54 @@ build-backend = "setuptools.build_meta"
 where = [".", "sdk"]
 include = ["app*", "eraherm_memory*", "evals*"]
 
+[tool.setuptools.package-data]
+# py.typed：pyproject 声明了 Typing :: Typed，但缺这个文件下游 mypy 不会消费类型
+eraherm_memory = ["py.typed"]
+# evals/cases.json 不是 .py，默认不会进 wheel → 装完后 `eraherm-eval` 会在
+# `Path(__file__).with_name("cases.json")` 处 FileNotFoundError
+evals = ["cases.json"]
+
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+# hermes-plugin/tests 以前不在 testpaths 里 → 25 个测试（占全部测试的 20%）从不进 CI。
+# 该目录的 conftest 自带 Hermes ABC stub，只依赖标准库，可以独立运行。
+testpaths = ["tests", "hermes-plugin/tests"]
 pythonpath = [".", "sdk"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = [".venv", "venv", "build", "dist", "storage", "demo"]
+
+[tool.ruff.lint]
+# 刻意保守起步：CI 里的 lint job 目前是 advisory（continue-on-error），
+# 等基线清干净再收紧规则集。
+select = ["E", "F", "W", "I", "UP", "B", "C4"]
+ignore = [
+  "E501",   # 行宽由 formatter 管
+  "B008",   # FastAPI 的 Depends()/Query() 默认值就是这种用法
+  "UP038",  # isinstance 元组写法在新版本里有取舍
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011"]
+"alembic/versions/*" = ["E402"]
+
+[tool.mypy]
+python_version = "3.12"
+# 类型检查目前也是 advisory：项目没有 py.typed 的历史很长，
+# 一次性开 strict 会淹没真正的错误。先做到「不因为缺 stub 而失败」。
+ignore_missing_imports = true
+warn_unused_ignores = false
+warn_redundant_casts = true
+no_implicit_optional = true
+check_untyped_defs = true
+files = ["app", "sdk"]
+
+[tool.coverage.run]
+source = ["app", "sdk/eraherm_memory"]
+omit = ["*/alembic/*", "*/tests/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:", "raise NotImplementedError"]

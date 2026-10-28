@@ -1,0 +1,112 @@
+# EraHerm-Memory — 单机 Docker Compose 部署
+#
+# 用法：
+#   cp .env.example .env
+#   python -c "import secrets;print(secrets.token_urlsafe(32))"   # 填进 .env 的 ERAHERM_API_TOKEN
+#   docker compose up -d
+#
+# 详细说明见 docs/DEPLOYMENT_DOCKER.md（含迁移、备份、多 worker 警告）。
+
+services:
+  eraherm:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # 可选依赖开关。默认 "mcp,scheduler"（见 Dockerfile）。
+        # 想开本地中文向量就改成 mcp,scheduler,fastembed，或在 .env 里设 ERAHERM_EXTRAS。
+        EXTRAS: "${ERAHERM_EXTRAS:-mcp,scheduler}"
+    image: eraherm-memory:0.10.1
+    container_name: eraherm
+    # 默认只把端口绑到宿主回环：即使没有前置网关，容器也不对外可达（最安全的默认）。
+    # 要对其它机器提供服务：改成 "8000:8000"（或 "<内网IP>:8000:8000"），
+    # 并确认 .env 里已设置真实的 ERAHERM_API_TOKEN —— 否则容器会直接退出（fail-fast，
+    # 见 app/security.py 与 README「认证与暴露面」）。真正对公网开放时请在其前面
+    # 放反向代理做 TLS + 速率限制（本镜像不带 TLS，也没有限流）。
+    ports:
+      - "127.0.0.1:8000:8000"
+    env_file:
+      - .env
+    environment:
+      # 容器内必须监听所有网卡，否则宿主端口映射打不进来。
+      # 这一项 = 触发 fail-fast 的前提：没有真实 ERAHERM_API_TOKEN 时进程拒绝启动。
+      ERAHERM_HOST: "0.0.0.0"
+      # 下面两个确保「迁移」和「API 进程」写的是同一个 SQLite 文件。
+      ERAHERM_DATA_DIR: "/data"
+      ERAHERM_DATABASE_URL: "sqlite:////data/eraherm.db"
+      # 必须显式提供（写在 .env 里）；没写时 compose 自己就先报错，
+      # 而不是等容器起来反复重启。生成：python -c "import secrets;print(secrets.token_urlsafe(32))"
+      ERAHERM_API_TOKEN: "${ERAHERM_API_TOKEN:?set ERAHERM_API_TOKEN in .env}"
+      # admin 端点（consolidate / watchdog / reembed / l3 dump）需要它；
+      # 不设置时 /v1/admin/* 一律 503（fail-closed），不是漏洞。
+      # ERAHERM_ADMIN_TOKEN: "${ERAHERM_ADMIN_TOKEN:-}"
+
+    # ⚠️ 单写者警告：默认 SQLite + 进程内 L1(dict) + 进程内 scheduler，
+    #    所以**不要**加 `--workers > 1`（也不要在同一份 /data 上跑多个副本）。
+    #    多 worker 会让每个进程各持一份 L1 与一份夜间整理任务，SQLite 单写者
+    #    还会在高并发下锁冲突 —— 共享 L1 只上 Redis 也**不够**，主库仍是单文件。
+    #    真要多实例：先换掉主库（Postgres，尚未实现），再上 Redis/Qdrant。
+    restart: unless-stopped
+    volumes:
+      # 命名卷挂在 /data：SQLite 库 + storage/l3 归档 + fastembed 缓存都在这里。
+      - eraherm-data:/data
+    healthcheck:
+      # 与 Dockerfile 的 HEALTHCHECK 保持一致：GET /v1/health 是公开路由，不需要 token。
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import sys,urllib.request; r=urllib.request.urlopen('http://127.0.0.1:8000/v1/health', timeout=4); sys.exit(0 if r.status < 500 else 1)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # ---------------------------------------------------------------------------
+  # 以下服务都是**可选**的：默认配置（memory / sqlite / networkx / hashing）不需要
+  # 任何一个。按 docs/DEPLOYMENT.md 的「触发条件」逐个打开，别一次全开。
+  # 启用时记得两件事：① 取消注释；② 在 .env 里把对应 backend 指到服务名（不是 localhost）。
+  # ---------------------------------------------------------------------------
+
+  # 可选：多实例共享 L1 会话缓存
+  #   .env: ERAHERM_SESSION_CACHE_BACKEND=redis
+  #         ERAHERM_REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+  #   记得给上面的 eraherm 服务加 `depends_on: [redis]`。
+  #   Dockerfile 需要 EXTRAS 带 redis（默认的 mcp,scheduler 不含 redis）。
+  #
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: eraherm-redis
+  #   command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}"]
+  #   restart: unless-stopped
+  #   volumes:
+  #     - redis-data:/data
+  #   healthcheck:
+  #     test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+  #     interval: 30s
+  #     timeout: 5s
+  #     retries: 3
+
+  # 可选：向量库（记忆量大 / 召回 QPS 高时才需要）
+  #   .env: ERAHERM_VECTOR_BACKEND=qdrant
+  #         ERAHERM_QDRANT_URL=http://qdrant:6333
+  #   记得给上面的 eraherm 服务加 `depends_on: [qdrant]`。
+  #   Dockerfile 需要 EXTRAS 带 qdrant。换 backend / 改维度后必须重建向量：
+  #   eraherm-reembed --orphan-user-id <uid> --recreate-collection
+  #
+  # qdrant:
+  #   image: qdrant/qdrant:latest   # 生产请钉具体版本，别用 latest
+  #   container_name: eraherm-qdrant
+  #   restart: unless-stopped
+  #   volumes:
+  #     - qdrant-data:/qdrant/storage
+  #   # 只给宿主回环调试用；容器之间走 compose 网络，不需要对外暴露
+  #   # ports:
+  #   #   - "127.0.0.1:6333:6333"
+
+volumes:
+  eraherm-data:
+  # redis-data:
+  # qdrant-data:

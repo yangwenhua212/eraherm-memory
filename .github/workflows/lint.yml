@@ -1,0 +1,59 @@
+name: Lint & Types (advisory)
+
+# ⚠️ 这个 workflow 目前是**咨询性质，不是门禁**。
+# 本仓库此前完全没有 lint / 类型检查（见 .github/workflows/ci.yml：只有 pytest + eval），
+# 所以 ruff 与 mypy 的基线尚未清理干净。这里所有 ruff/mypy 步骤都带
+# `continue-on-error: true`，红叉只表示「可以开始清理了」，不应据此阻塞合并。
+# 等基线清零后，把下面几个 continue-on-error 去掉即可升级为真正的门禁。
+# 唯一的**真门禁**是 compileall（语法错误就是错误，任何分支都不该合）。
+#
+# 工具配置一律来自 pyproject.toml（本 workflow 不传 --config，也不新增 ruff.toml/mypy.ini）。
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install package + lint tools
+        # 装包是为了让 mypy 能解析 app/sdk 的真实导入（sqlmodel / fastapi / pydantic 等）。
+        # 版本刻意钉住：ruff 的规则集与 mypy 的检查项在次版本间会变，
+        # 不钉住的话「昨天还绿今天就红」。升级时改这一行即可。
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ruff==0.14.4 mypy==1.18.2
+          python -m pip install -e ".[dev,mcp,scheduler]"
+
+      # --- 真门禁：语法错误不可接受 -------------------------------------------
+      - name: Compile all sources (hard gate)
+        run: python -m compileall -q app sdk evals
+
+      # --- 以下为 advisory（基线未清理）--------------------------------------
+      - name: ruff check (advisory)
+        continue-on-error: true
+        run: ruff check .
+
+      - name: ruff format --check (advisory)
+        continue-on-error: true
+        run: ruff format --check .
+
+      - name: mypy app sdk (advisory)
+        continue-on-error: true
+        run: mypy app sdk

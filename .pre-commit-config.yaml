@@ -1,0 +1,37 @@
+# pre-commit 钩子。安装：pre-commit install
+# 手动全量跑：pre-commit run --all-files
+#
+# 与 .github/workflows/lint.yml 的关系：那边跑的是同样的 ruff（但不加 --fix），
+# 且因为基线未清理而是 advisory。本地 pre-commit 会**直接修**能修的东西。
+# 所有 hook repo 都钉 tag；Dependabot 会为它们提更新 PR（见 .github/dependabot.yml）。
+#
+# 注意：ruff 的规则集仍来自 pyproject.toml（此处不传 --config）。
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        # Markdown 里行尾两个空格是有意的换行；exclude 掉避免破坏排版。
+        exclude: \.md$
+      - id: end-of-file-fixer
+      - id: check-yaml
+        # GitHub Actions 的 on:/jobs: 与 dependabot 的 version: 用标准 YAML
+        # 解析器（PyYAML）也能过，但 keep it explicit：只对模板文件放行多文档语法。
+        args: [--allow-multiple-documents]
+      - id: check-toml
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: detect-private-key
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    # 与 .github/workflows/lint.yml 里钉的 ruff 版本保持一致，避免「本地过、CI 挂」。
+    rev: v0.14.4
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format

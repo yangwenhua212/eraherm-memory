@@ -1,0 +1,64 @@
+name: Release
+
+# 打 `v*` tag 时构建 sdist + wheel，并创建 GitHub Release（产物作为附件）。
+# 例：git tag v0.10.1 && git push origin v0.10.1
+#
+# 关于发布到 PyPI：**本 workflow 刻意不发布到 PyPI**。
+# 预期路径是 PyPI Trusted Publishing（OIDC，免长期 token），但那需要在 PyPI
+# 维护者账号侧先配置好 publisher（项目名 + 仓库 + workflow 文件名 + environment），
+# 属于账号级设置，不在代码里。等这一步做完，再在下面加一个
+# `pypa/gh-action-pypi-publish` 步骤（配 `permissions: id-token: write` +
+# `environment: pypi`）即可，不需要任何密钥。
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # 需要完整历史：生成 release notes 时要用到上一个 tag。
+          fetch-depth: 0
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install build backend
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build
+
+      - name: Build sdist and wheel
+        run: python -m build
+
+      - name: List artifacts
+        run: ls -l dist/
+
+      - name: Upload dist as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/*
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2.2.2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        # GITHUB_TOKEN 由 workflow 的 `permissions: contents: write` 授权，
+        # 不需要额外配置 secret。

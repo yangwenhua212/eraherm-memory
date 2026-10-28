@@ -28,8 +28,19 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev,mcp,scheduler]"
 
+      - name: Alembic upgrade head (fresh DB)
+        # 迁移路径以前从不被验证：0001 曾用 metadata.create_all()，任何模型改动都不会
+        # 让迁移失败。现在 0001 是显式 DDL，这一步才有意义。
+        run: |
+          ERAHERM_DATABASE_URL="sqlite:///./ci-migrate.db" alembic upgrade head
+          python -c "import sqlite3;print('tables:', sorted(r[0] for r in sqlite3.connect('ci-migrate.db').execute(\"select name from sqlite_master where type='table'\")))"
+
       - name: Pytest
         run: python -m pytest -q --tb=short
 
       - name: Eval harness
         run: python -m evals.harness
+
+      - name: Eval harness (strict latency budget)
+        # 冒烟级延迟预算（hashing + 进程内），不是基准；用来在回归时抓到数量级退化。
+        run: python -m evals.harness --strict --max-ms 500

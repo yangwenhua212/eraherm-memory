@@ -1,0 +1,71 @@
+# 构建上下文瘦身 + 避免把密钥/本地数据打进镜像层。
+# 注意：.env 被排除，但 .env.example 要保留（文档/占位参考）。
+
+# --- 版本控制 ---
+.git
+.gitignore
+.gitattributes
+.github
+
+# --- Python 虚拟环境 / 字节码 / 缓存 ---
+.venv
+venv
+env
+ENV
+__pycache__
+*.py[cod]
+*.egg-info
+.eggs
+build
+dist
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.tox
+.nox
+htmlcov
+.coverage
+.coverage.*
+coverage.xml
+
+# --- 本地数据 / 运行时产物（必须排除：可能含真实记忆与 SQLite 库）---
+storage/
+data/
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+*.log
+
+# --- 密钥与本地配置 ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+.idea
+.vscode
+.vs
+
+# --- 与镜像无关的开发/文档/插件目录 ---
+docs/
+tests/
+examples/
+scripts/
+hermes-plugin/
+.gitignore
+CHANGELOG.md
+CONTRIBUTING.md
+SECURITY.md
+docker-compose.yml
+Dockerfile
+.dockerignore
+.pre-commit-config.yaml
+
+# --- 系统垃圾文件 ---
+.DS_Store
+Thumbs.db
+desktop.ini
+*~
+*.swp

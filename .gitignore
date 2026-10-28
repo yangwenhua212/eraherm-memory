@@ -28,3 +28,4 @@ run.sh
 watchdog.sh
 start_mcp.sh
 *.bak-local
+

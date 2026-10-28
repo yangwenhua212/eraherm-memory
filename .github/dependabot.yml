@@ -1,0 +1,57 @@
+# Dependabot：只做「发现新版本 → 开 PR」，不自动合并。
+# 版本更新仍需人工过 CI（本仓库 CI 见 .github/workflows/ci.yml）。
+version: 2
+updates:
+  # Python 依赖（pyproject.toml 的 dependencies / optional-dependencies）
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "03:00"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "python"
+    commit-message:
+      prefix: "deps"
+    groups:
+      # 次要/补丁版本合并成一个 PR，避免每周被十几个小版本 PR 淹没。
+      python-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
+      # 安全更新单独分组，方便优先审。
+      python-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+
+  # GitHub Actions（.github/workflows/*.yml 里用到的 action 版本）
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "03:00"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "ci"
+    groups:
+      actions-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - "minor"
+          - "patch"
+
+  # 可选：把基础镜像 python:3.13-slim 的更新也纳入。Dependabot 能解析 Dockerfile
+  # 的 FROM 行并提 PR，但镜像 tag 变动通常需要人工确认，所以默认注释掉。
+  # - package-ecosystem: "docker"
+  #   directory: "/"
+  #   schedule:
+  #     interval: "weekly"
+  #   open-pull-requests-limit: 1
