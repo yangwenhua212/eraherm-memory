@@ -42,7 +42,7 @@ dev = [
 redis = ["redis>=5.0.0,<7"]
 qdrant = ["qdrant-client>=1.12.0,<2"]
 neo4j = ["neo4j>=5.26.0,<7"]
-mcp = ["mcp>=1.9.0,<2"]
+mcp = ["mcp>=1.9.0,<3"]
 # apscheduler 4.x 是不兼容重写，这里明确限制在 3.x
 scheduler = ["apscheduler>=3.10.0,<4"]
 fastembed = ["fastembed>=0.4.0,<2"]
